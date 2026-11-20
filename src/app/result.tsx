@@ -37,58 +37,58 @@ export default function ResultScreen() {
     catch (error) { setFailure(errorText(error, language)); }
   };
   if (!session || !summary || (!complete && session.ratings.length < 20)) return <Screen>
-    <Header back={{ label: tx(language, 'Spaces', 'Пространства'), onPress: () => router.replace('/') }} />
-    <EmptyState title={tx(language, 'A little more inspiration', 'Ещё немного вдохновения')} description={tx(language, 'Choose more interiors to discover your style.', 'Выберите ещё несколько интерьеров, чтобы узнать свой стиль.')}><Button title={session ? tx(language, 'Continue choosing', 'Продолжить выбор') : tx(language, 'Choose a space', 'Выбрать пространство')} onPress={() => router.replace(session ? '/gallery' : '/')} /></EmptyState>
+    <Header back={{ label: tx(language, 'Otaglar', 'Пространства'), onPress: () => router.replace('/') }} />
+    <EmptyState title={tx(language, 'Ýene biraz ylham', 'Ещё немного вдохновения')} description={tx(language, 'Öz stiliňizi anyklamak üçin ýene birnäçe interýer saýlaň.', 'Выберите ещё несколько интерьеров, чтобы узнать свой стиль.')}><Button title={session ? tx(language, 'Saýlamagy dowam etmek', 'Продолжить выбор') : tx(language, 'Otagy saýlamak', 'Выбрать пространство')} onPress={() => router.replace(session ? '/gallery' : '/')} /></EmptyState>
   </Screen>;
-  const styleTitle = summary.kind === 'inconclusive' ? tx(language, 'No clear style yet', 'Стиль пока не определён') : summary.kind === 'varied' ? tx(language, 'A mix of styles', 'Сочетание стилей') : summary.styles.map(style => terms.get(style.styleId) ?? '').join(' + ');
+  const styleTitle = summary.kind === 'inconclusive' ? tx(language, 'Stil entek anyklanmady', 'Стиль пока не определён') : summary.kind === 'varied' ? tx(language, 'Stilleriň garyndysy', 'Сочетание стилей') : summary.styles.map(style => terms.get(style.styleId) ?? '').join(' + ');
   const description = summary.kind === 'inconclusive'
-    ? tx(language, 'Not enough shared preferences yet. Use your liked photos to explore ideas with a designer.', 'Пока недостаточно общих предпочтений. Обсудите понравившиеся фотографии с дизайнером.')
-    : tx(language, 'A direction based on your choices in this collection.', 'Направление на основе вашего выбора в этой коллекции.');
+    ? tx(language, 'Entek umumy islegler ýeterlik däl. Halan suratlaryňyzy dizaýner bilen ara alyp maslahatlaşyň.', 'Пока недостаточно общих предпочтений. Обсудите понравившиеся фотографии с дизайнером.')
+    : tx(language, 'Bu toplumda eden saýlawlaryňyza esaslanan ugur.', 'Направление на основе вашего выбора в этой коллекции.');
   const featureCategories = [
-    { kind: 'palette' as const, label: tx(language, 'Palette', 'Палитра') },
-    { kind: 'material' as const, label: tx(language, 'Materials', 'Материалы') },
-    { kind: 'detail' as const, label: tx(language, 'Details', 'Детали') },
+    { kind: 'palette' as const, label: tx(language, 'Palitra', 'Палитра') },
+    { kind: 'material' as const, label: tx(language, 'Materiallar', 'Материалы') },
+    { kind: 'detail' as const, label: tx(language, 'Aýratynlyklar', 'Детали') },
   ].filter(category => summary.features[category.kind].length > 0);
   const viewing = selected !== null ? likedPhotos[selected] : undefined;
   const scrollActions = layout.fontScale >= 1.5 || layout.height < 500;
   const actions = <View style={styles.actions}>
-    {!complete ? <Button title={tx(language, 'Continue choosing', 'Продолжить выбор')} onPress={() => router.replace('/gallery')} disabled={busy} style={{ flexGrow: 1 }} /> : session.ratings.length > 0 ? <IconButton label={tx(language, 'Revisit last choice', 'Изменить последний выбор')} fallbackLabel={tx(language, 'Undo', 'Отменить')} icon="undo" onPress={() => void lastChoice()} disabled={busy} /> : null}
-    <Button title={tx(language, 'New client', 'Новый клиент')} accessibilityLabel={tx(language, 'Start with a new client', 'Новый клиент')} variant="secondary" onPress={() => setConfirmNew(true)} disabled={busy} style={{ flexGrow: 1 }} />
+    {!complete ? <Button title={tx(language, 'Saýlamagy dowam etmek', 'Продолжить выбор')} onPress={() => router.replace('/gallery')} disabled={busy} style={{ flexGrow: 1 }} /> : session.ratings.length > 0 ? <IconButton label={tx(language, 'Soňky saýlawy üýtgetmek', 'Изменить последний выбор')} fallbackLabel={tx(language, 'Yza gaýtarmak', 'Отменить')} icon="undo" onPress={() => void lastChoice()} disabled={busy} /> : null}
+    <Button title={tx(language, 'Täze müşderi', 'Новый клиент')} accessibilityLabel={tx(language, 'Täze müşderi bilen başlamak', 'Новый клиент')} variant="secondary" onPress={() => setConfirmNew(true)} disabled={busy} style={{ flexGrow: 1 }} />
   </View>;
   return <Screen scroll={false} style={{ gap: 10 }}>
-    <Header back={{ label: tx(language, 'Spaces', 'Пространства'), onPress: () => router.replace('/') }} right={<Text style={typography.eyebrow}>ARWANA</Text>} />
+    <Header back={{ label: tx(language, 'Otaglar', 'Пространства'), onPress: () => router.replace('/') }} right={<Text style={typography.eyebrow}>ARWANA</Text>} />
     <FlatList key={columns} data={likedPhotos} numColumns={columns} keyExtractor={item => item.id} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: 12 }} columnWrapperStyle={columns > 1 ? { gap: 12 } : undefined} showsVerticalScrollIndicator={false} initialNumToRender={8} maxToRenderPerBatch={8} windowSize={5}
       ListHeaderComponent={<View style={styles.headerContent}>
         {failure || app.error ? <ErrorBanner message={failure ?? errorText(app.error, language)} /> : null}
-        <View style={styles.row}><Chip label={complete ? tx(language, 'Your style', 'Ваш стиль') : tx(language, 'Preliminary result', 'Предварительный результат')} selected /><Text style={typography.small}>{session.ratings.length}/{session.catalog.galleries[session.space].length} {tx(language, 'reviewed', 'просмотрено')}</Text></View>
+        <View style={styles.row}><Chip label={complete ? tx(language, 'Siziň stiliňiz', 'Ваш стиль') : tx(language, 'Deslapky netije', 'Предварительный результат')} selected /><Text style={typography.small}>{session.ratings.length}/{session.catalog.galleries[session.space].length} {tx(language, 'görüldi', 'просмотрено')}</Text></View>
         <Text accessibilityRole="header" style={layout.fontScale >= 1.5 ? typography.subheading : typography.heading}>{styleTitle}</Text>
-        <View style={styles.row}><Text style={[typography.small, { flex: 1 }]}>{photoCount(likedPhotos.length, language)} · {spaceLabel(session.space, language)}</Text><Button title={tx(language, 'Details', 'Подробнее')} variant="ghost" onPress={() => setDetailsOpen(true)} /></View>
+        <View style={styles.row}><Text style={[typography.small, { flex: 1 }]}>{photoCount(likedPhotos.length, language)} · {spaceLabel(session.space, language)}</Text><Button title={tx(language, 'Jikme-jik', 'Подробнее')} variant="ghost" onPress={() => setDetailsOpen(true)} /></View>
       </View>}
-      renderItem={({ item, index }) => <PhotoTile photo={item} language={language} title={spaceLabel(item.room, language)} label={tx(language, 'Open liked photo', 'Открыть понравившееся фото') + ' ' + (index + 1) + ': ' + spaceLabel(item.room, language)} onPress={() => setSelected(index)} style={{ width: (layout.contentWidth - (columns - 1) * 12) / columns, marginBottom: 12 }} imageStyle={{ aspectRatio: 1.15 }} />}
-      ListEmptyComponent={<View style={styles.empty}><Text style={typography.body}>{tx(language, 'No liked photos. Try another collection with a staff member.', 'Нет понравившихся фото. Попробуйте другую подборку с сотрудником.')}</Text></View>}
-      ListFooterComponent={<View style={{ gap: 12 }}>{scrollActions ? actions : null}<Text style={typography.small}>{tx(language, 'Saved on this device until the next client.', 'Сохранено на устройстве до нового клиента.')}</Text></View>}
+      renderItem={({ item, index }) => <PhotoTile photo={item} language={language} title={spaceLabel(item.room, language)} label={tx(language, 'Halanan suraty açmak', 'Открыть понравившееся фото') + ' ' + (index + 1) + ': ' + spaceLabel(item.room, language)} onPress={() => setSelected(index)} style={{ width: (layout.contentWidth - (columns - 1) * 12) / columns, marginBottom: 12 }} imageStyle={{ aspectRatio: 1.15 }} />}
+      ListEmptyComponent={<View style={styles.empty}><Text style={typography.body}>{tx(language, 'Halanan surat ýok. Işgär bilen başga toplumy synap görüň.', 'Нет понравившихся фото. Попробуйте другую подборку с сотрудником.')}</Text></View>}
+      ListFooterComponent={<View style={{ gap: 12 }}>{scrollActions ? actions : null}<Text style={typography.small}>{tx(language, 'Täze müşderä çenli bu enjamda saklanýar.', 'Сохранено на устройстве до нового клиента.')}</Text></View>}
     />
     {!scrollActions ? actions : null}
     <AppModal visible={detailsOpen} animationType="slide" onRequestClose={() => setDetailsOpen(false)}>
       <Screen>
-        <Header title={tx(language, 'Details', 'Подробнее')} right={<IconButton icon="close" label={tx(language, 'Close details', 'Закрыть подробности')} fallbackLabel={tx(language, 'Close', 'Закрыть')} onPress={() => setDetailsOpen(false)} />} />
+        <Header title={tx(language, 'Jikme-jik', 'Подробнее')} right={<IconButton icon="close" label={tx(language, 'Jikme-jikligi ýapmak', 'Закрыть подробности')} fallbackLabel={tx(language, 'Ýapmak', 'Закрыть')} onPress={() => setDetailsOpen(false)} />} />
         <Text accessibilityRole="header" style={layout.fontScale >= 1.5 ? typography.subheading : typography.heading}>{styleTitle}</Text>
         <Text style={typography.body}>{description}</Text>
         {summary.kind === 'varied' ? <View style={styles.row}>{summary.styles.map(style => <Chip key={style.styleId} label={terms.get(style.styleId) ?? ''} />)}</View> : null}
-        <Text style={typography.small}>{summary.reviewed} {tx(language, 'reviewed', 'просмотрено')} · {summary.likedIds.length} {tx(language, 'liked', 'понравилось')}</Text>
+        <Text style={typography.small}>{summary.reviewed} {tx(language, 'görüldi', 'просмотрено')} · {summary.likedIds.length} {tx(language, 'halandy', 'понравилось')}</Text>
         {featureCategories.map(category => <View key={category.kind} style={styles.detailCard}>
           <Text accessibilityRole="header" style={typography.subheading}>{category.label}</Text>
           {summary.features[category.kind].map(feature => <View key={feature.termId} style={styles.row}><Text style={[typography.body, { flex: 1, color: colors.ink }]}>{terms.get(feature.termId)}</Text><Text style={typography.small}>{feature.count}/{summary.likedIds.length}</Text></View>)}
         </View>)}
-        {featureCategories.length ? <Text style={typography.small}>{tx(language, 'Counts show how often a feature appears in your liked photos.', 'Числа показывают, как часто признак встречается в понравившихся фото.')}</Text> : <Text style={typography.small}>{tx(language, 'No shared features yet.', 'Общие признаки пока не определены.')}</Text>}
+        {featureCategories.length ? <Text style={typography.small}>{tx(language, 'Sanlar bu aýratynlygyň halanan suratlaryňyzda näçe gezek duş gelýändigini görkezýär.', 'Числа показывают, как часто признак встречается в понравившихся фото.')}</Text> : <Text style={typography.small}>{tx(language, 'Umumy aýratynlyklar entek kesgitlenmedi.', 'Общие признаки пока не определены.')}</Text>}
       </Screen>
     </AppModal>
     <AppModal visible={viewing !== undefined} animationType="fade" onRequestClose={() => setSelected(null)}><SafeAreaView style={styles.viewer}>
-      <View style={styles.viewerHeader}><Text style={styles.viewerTitle}>{viewing ? spaceLabel(viewing.room, language) : ''}</Text><IconButton label={tx(language, 'Close', 'Закрыть')} icon="close" onPress={() => setSelected(null)} /></View>
+      <View style={styles.viewerHeader}><Text style={styles.viewerTitle}>{viewing ? spaceLabel(viewing.room, language) : ''}</Text><IconButton label={tx(language, 'Ýapmak', 'Закрыть')} icon="close" onPress={() => setSelected(null)} /></View>
       {viewing ? <PhotoImage key={viewing.id} photo={viewing} language={language} fit="contain" style={styles.fullImage} label={spaceLabel(viewing.room, language) + ', ' + (terms.get(viewing.styleId) ?? '')} /> : null}
-      <View style={styles.viewerFooter}><IconButton label={tx(language, 'Previous', 'Назад')} icon="back" disabled={selected === 0} onPress={() => setSelected(value => value === null ? null : Math.max(0, value - 1))} /><Text style={styles.viewerCount}>{(selected ?? 0) + 1} / {likedPhotos.length}</Text><IconButton label={tx(language, 'Next', 'Далее')} icon="next" disabled={selected === likedPhotos.length - 1} onPress={() => setSelected(value => value === null ? null : Math.min(likedPhotos.length - 1, value + 1))} /></View>
+      <View style={styles.viewerFooter}><IconButton label={tx(language, 'Öňki', 'Назад')} icon="back" disabled={selected === 0} onPress={() => setSelected(value => value === null ? null : Math.max(0, value - 1))} /><Text style={styles.viewerCount}>{(selected ?? 0) + 1} / {likedPhotos.length}</Text><IconButton label={tx(language, 'Indiki', 'Далее')} icon="next" disabled={selected === likedPhotos.length - 1} onPress={() => setSelected(value => value === null ? null : Math.min(likedPhotos.length - 1, value + 1))} /></View>
     </SafeAreaView></AppModal>
-    <ConfirmDialog visible={confirmNew} language={language} title={tx(language, 'Ready for the next client?', 'Готовы к следующему клиенту?')} description={tx(language, 'This clears the current choices and result. The photo catalog stays.', 'Текущий выбор и результат будут удалены. Каталог фотографий сохранится.')} confirmLabel={tx(language, 'Clear and start fresh', 'Начать новый сеанс')} onConfirm={() => void clear()} onCancel={() => setConfirmNew(false)} loading={busy} />
+    <ConfirmDialog visible={confirmNew} language={language} title={tx(language, 'Indiki müşderä taýynmy?', 'Готовы к следующему клиенту?')} description={tx(language, 'Häzirki saýlawlar we netije aýrylar. Suratlar katalogy saklanar.', 'Текущий выбор и результат будут удалены. Каталог фотографий сохранится.')} confirmLabel={tx(language, 'Täze saýlawy başlamak', 'Начать новый сеанс')} onConfirm={() => void clear()} onCancel={() => setConfirmNew(false)} loading={busy} />
   </Screen>;
 }
 const styles = StyleSheet.create({

@@ -143,7 +143,7 @@ describe('evidence-based style summaries', () => {
   });
 
   test('unexpected native errors do not leak internal details, known import errors are localized', () => {
-    expect(messageForError(new Error('STORAGE_FULL'), 'en')).toContain('free space');
+    expect(messageForError(new Error('STORAGE_FULL'), 'tk')).toContain('ýat');
     expect(messageForError(new Error('private SQL or file path'), 'ru')).not.toContain('SQL');
   });
 });

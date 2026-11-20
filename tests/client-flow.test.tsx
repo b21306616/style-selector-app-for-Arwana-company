@@ -37,7 +37,7 @@ const asyncMock = () => jest.fn<() => Promise<void>>().mockResolvedValue(undefin
 beforeEach(() => {
   jest.clearAllMocks();
   app = {
-    ready: true, error: null, notices: [], language: 'en', catalog: seedCatalog, draft: seedCatalog,
+    ready: true, error: null, notices: [], language: 'tk', catalog: seedCatalog, draft: seedCatalog,
     session: sessionWith(0), busy: false,
     setLanguage: asyncMock(), startSession: asyncMock(),
     rate: asyncMock(), undo: asyncMock(), clearSession: asyncMock(),
@@ -50,13 +50,13 @@ test('gallery hides style metadata and only accepts one rating after the image l
   let finish!: () => void;
   jest.mocked(app.rate).mockImplementation(() => new Promise<void>(resolve => { finish = resolve; }));
   await render(<GalleryScreen />);
-  expect(screen.queryByText('Scandinavian')).not.toBeOnTheScreen();
-  expect(screen.queryByText('Warm neutrals')).not.toBeOnTheScreen();
-  expect(screen.getByRole('button', { name: 'Love it' })).toBeDisabled();
+  expect(screen.queryByText('Skandinaw')).not.toBeOnTheScreen();
+  expect(screen.queryByText('Ýyly bitarap öwüşginler')).not.toBeOnTheScreen();
+  expect(screen.getByRole('button', { name: 'Haladym' })).toBeDisabled();
   await fireEvent.press(screen.getByRole('button', { name: 'Image finished loading' }));
-  expect(screen.getByRole('button', { name: 'Love it' })).toBeEnabled();
-  await fireEvent.press(screen.getByRole('button', { name: 'Love it' }));
-  await fireEvent.press(screen.getByRole('button', { name: 'Not for me' }));
+  expect(screen.getByRole('button', { name: 'Haladym' })).toBeEnabled();
+  await fireEvent.press(screen.getByRole('button', { name: 'Haladym' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Maňa däl' }));
   expect(app.rate).toHaveBeenCalledTimes(1);
   expect(app.rate).toHaveBeenCalledWith('like');
   await act(async () => finish());
@@ -65,10 +65,10 @@ test('gallery hides style metadata and only accepts one rating after the image l
 test('preliminary result is available at 20 ratings, not 19', async () => {
   app.session = sessionWith(19);
   const view = await render(<GalleryScreen />);
-  expect(screen.queryByRole('button', { name: 'See preliminary result' })).not.toBeOnTheScreen();
+  expect(screen.queryByRole('button', { name: 'Deslapky netijäni görmek' })).not.toBeOnTheScreen();
   app = { ...app, session: sessionWith(20) };
   await view.rerender(<GalleryScreen />);
-  await fireEvent.press(screen.getByRole('button', { name: 'See preliminary result' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Deslapky netijäni görmek' }));
   expect(router.replace).toHaveBeenCalledWith('/result');
 });
 
@@ -81,9 +81,9 @@ test('completed gallery replaces itself with the result route', async () => {
 test('result protects previous client choices until reset is confirmed', async () => {
   app.session = sessionWith(32, true);
   await render(<ResultScreen />);
-  await fireEvent.press(screen.getByRole('button', { name: 'Start with a new client' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Täze müşderi bilen başlamak' }));
   expect(app.clearSession).not.toHaveBeenCalled();
-  await fireEvent.press(screen.getByRole('button', { name: 'Clear and start fresh' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Täze saýlawy başlamak' }));
   expect(app.clearSession).toHaveBeenCalledTimes(1);
   expect(router.replace).toHaveBeenCalledWith('/');
 });
@@ -102,12 +102,12 @@ test('Russian home uses real gallery counts and asks before replacing a client s
 test('result keeps features behind Details and preserves the selection when closing it', async () => {
   app.session = sessionWith(32, true);
   await render(<ResultScreen />);
-  expect(screen.getAllByRole('button', { name: /Open liked photo/ }).length).toBeGreaterThan(0);
-  expect(screen.queryByText('Warm neutrals')).not.toBeOnTheScreen();
-  await fireEvent.press(screen.getByRole('button', { name: 'Details' }));
-  expect(screen.getByText('Warm neutrals')).toBeOnTheScreen();
-  await fireEvent.press(screen.getByRole('button', { name: 'Close details' }));
-  expect(screen.queryByText('Warm neutrals')).not.toBeOnTheScreen();
+  expect(screen.getAllByRole('button', { name: /Halanan suraty açmak/ }).length).toBeGreaterThan(0);
+  expect(screen.queryByText('Ýyly bitarap öwüşginler')).not.toBeOnTheScreen();
+  await fireEvent.press(screen.getByRole('button', { name: 'Jikme-jik' }));
+  expect(screen.getByText('Ýyly bitarap öwüşginler')).toBeOnTheScreen();
+  await fireEvent.press(screen.getByRole('button', { name: 'Jikme-jikligi ýapmak' }));
+  expect(screen.queryByText('Ýyly bitarap öwüşginler')).not.toBeOnTheScreen();
   expect(app.clearSession).not.toHaveBeenCalled();
   expect(app.undo).not.toHaveBeenCalled();
 });
@@ -115,33 +115,33 @@ test('result keeps features behind Details and preserves the selection when clos
 test('liked-photo viewer uses accessible icon navigation with correct boundaries', async () => {
   app.session = { ...sessionWith(32, true), ratings: sessionWith(32, true).ratings.map((rating, index) => ({ ...rating, choice: index < 2 ? 'like' : 'dislike' })) };
   await render(<ResultScreen />);
-  await fireEvent.press(screen.getAllByRole('button', { name: /Open liked photo/ })[0]);
-  expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled();
-  expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled();
-  await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
-  expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
-  expect(screen.getByRole('button', { name: 'Previous' })).toBeEnabled();
-  await fireEvent.press(screen.getByRole('button', { name: 'Close' }));
-  expect(screen.queryByRole('button', { name: 'Next' })).not.toBeOnTheScreen();
+  await fireEvent.press(screen.getAllByRole('button', { name: /Halanan suraty açmak/ })[0]);
+  expect(screen.getByRole('button', { name: 'Öňki' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Indiki' })).toBeEnabled();
+  await fireEvent.press(screen.getByRole('button', { name: 'Indiki' }));
+  expect(screen.getByRole('button', { name: 'Indiki' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Öňki' })).toBeEnabled();
+  await fireEvent.press(screen.getByRole('button', { name: 'Ýapmak' }));
+  expect(screen.queryByRole('button', { name: 'Indiki' })).not.toBeOnTheScreen();
 });
 
 test('failed photos cannot be rated until a successful reload', async () => {
   await render(<GalleryScreen />);
   await fireEvent.press(screen.getByRole('button', { name: 'Image failed' }));
-  expect(screen.getByRole('button', { name: 'Love it' })).toBeDisabled();
-  expect(screen.getByRole('button', { name: 'Not for me' })).toBeDisabled();
-  await fireEvent.press(screen.getByRole('button', { name: 'Reload photo' }));
-  expect(screen.getByRole('button', { name: 'Love it' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Haladym' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Maňa däl' })).toBeDisabled();
+  await fireEvent.press(screen.getByRole('button', { name: 'Suraty täzeden açmak' }));
+  expect(screen.getByRole('button', { name: 'Haladym' })).toBeDisabled();
   await fireEvent.press(screen.getByRole('button', { name: 'Image finished loading' }));
-  expect(screen.getByRole('button', { name: 'Love it' })).toBeEnabled();
+  expect(screen.getByRole('button', { name: 'Haladym' })).toBeEnabled();
   expect(app.rate).not.toHaveBeenCalled();
 });
 
 test('no liked photos produces an honest empty result and no invented style', async () => {
   app.session = { ...sessionWith(32, true), ratings: sessionWith(32, true).ratings.map(rating => ({ ...rating, choice: 'dislike' })) };
   await render(<ResultScreen />);
-  expect(screen.getByText('No clear style yet')).toBeOnTheScreen();
-  expect(screen.queryByRole('button', { name: /Open liked photo/ })).not.toBeOnTheScreen();
-  await fireEvent.press(screen.getByRole('button', { name: 'Details' }));
-  expect(screen.getByText('No shared features yet.')).toBeOnTheScreen();
+  expect(screen.getByText('Stil entek anyklanmady')).toBeOnTheScreen();
+  expect(screen.queryByRole('button', { name: /Halanan suraty açmak/ })).not.toBeOnTheScreen();
+  await fireEvent.press(screen.getByRole('button', { name: 'Jikme-jik' }));
+  expect(screen.getByText('Umumy aýratynlyklar entek kesgitlenmedi.')).toBeOnTheScreen();
 });

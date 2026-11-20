@@ -13,7 +13,7 @@ function AppContent() {
   const { ready, error, refresh, language } = useApp();
   if (!ready) return <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, gap: 24, backgroundColor: colors.background }}>
     <Text style={[typography.heading, { letterSpacing: 5 }]}>ARWANA</Text>
-    {error ? <><Text style={[typography.body, { textAlign: 'center' }]}>{messageForError(error, language)}</Text><Button title="Повторить / Retry" onPress={() => void refresh()} /></> : <ActivityIndicator color={colors.green} />}
+    {error ? <><Text style={[typography.body, { textAlign: 'center' }]}>{messageForError(error, language)}</Text><Button title="Повторить / Gaýtalamak" onPress={() => void refresh()} /></> : <ActivityIndicator color={colors.green} />}
   </View>;
   return <Stack screenOptions={{ headerShown: false, contentStyle: { backgroundColor: colors.background } }} />;
 }

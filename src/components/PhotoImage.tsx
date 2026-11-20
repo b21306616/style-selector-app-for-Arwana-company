@@ -12,7 +12,7 @@ export function PhotoImage({ photo, thumbnail = false, language, label, style, f
   const [failedSource, setFailedSource] = useState<string | null>(null);
   const failed = failedSource === sourceKey;
   return <View style={[styles.container, style]}>
-    {failed ? <View style={styles.fallback}><Text style={styles.error}>{tx(language, 'This photo could not be opened.', 'Не удалось открыть фотографию.')}</Text></View> : <Image source={photoSource(photo, thumbnail)} style={StyleSheet.absoluteFill} contentFit={fit} cachePolicy="none" recyclingKey={sourceKey} allowDownscaling transition={0} accessibilityLabel={label} accessible={!!label} onLoad={onReady} onError={() => { setFailedSource(sourceKey); onFailure?.(); }} />}
+    {failed ? <View style={styles.fallback}><Text style={styles.error}>{tx(language, 'Bu suraty açyp bolmady.', 'Не удалось открыть фотографию.')}</Text></View> : <Image source={photoSource(photo, thumbnail)} style={StyleSheet.absoluteFill} contentFit={fit} cachePolicy="none" recyclingKey={sourceKey} allowDownscaling transition={0} accessibilityLabel={label} accessible={!!label} onLoad={onReady} onError={() => { setFailedSource(sourceKey); onFailure?.(); }} />}
   </View>;
 }
 const styles = StyleSheet.create({ container: { backgroundColor: colors.sand, overflow: 'hidden' }, fallback: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 20 }, error: { fontSize: 14, textAlign: 'center', color: colors.muted } });

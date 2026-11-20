@@ -23,7 +23,7 @@ let app: AppContextValue;
 beforeEach(() => {
   jest.clearAllMocks();
   app = {
-    ready: true, error: null, notices: [], language: 'en', catalog: cloneCatalog(seedCatalog), draft: cloneCatalog(seedCatalog),
+    ready: true, error: null, notices: [], language: 'tk', catalog: cloneCatalog(seedCatalog), draft: cloneCatalog(seedCatalog),
     session: null, busy: false, setLanguage: asyncMock(), startSession: asyncMock(), rate: asyncMock(), undo: asyncMock(),
     clearSession: asyncMock(), saveDraft: asyncMock(), publishDraft: asyncMock(), resetDraft: asyncMock(), refresh: asyncMock(), dismissNotices: jest.fn(),
   };
@@ -32,10 +32,10 @@ beforeEach(() => {
 
 test('changing a photo room removes it from its former room gallery while preserving Whole House', async () => {
   await render(<Photos />);
-  await fireEvent.press(screen.getAllByRole('button', { name: 'Bathroom, Scandinavian' })[0]);
-  const roomButtons = screen.getAllByRole('button', { name: 'Kitchen' });
+  await fireEvent.press(screen.getAllByRole('button', { name: 'Wanna otagy, Skandinaw' })[0]);
+  const roomButtons = screen.getAllByRole('button', { name: 'Aşhana' });
   await fireEvent.press(roomButtons[roomButtons.length - 1]);
-  await fireEvent.press(screen.getByRole('button', { name: 'Save photo' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Suraty ýatda sakla' }));
   const saved = jest.mocked(app.saveDraft).mock.calls[0][0] as Catalog;
   const id = 'bathroom-scandinavian-1';
   expect(saved.photos.find(photo => photo.id === id)?.room).toBe('kitchen');
@@ -45,35 +45,35 @@ test('changing a photo room removes it from its former room gallery while preser
 
 test('a referenced term cannot be deleted, and saving requires both language labels', async () => {
   await render(<Vocabulary />);
-  await fireEvent.press(screen.getByText('Scandinavian'));
-  expect(screen.getByRole('button', { name: 'Delete term' })).toBeDisabled();
+  await fireEvent.press(screen.getByText('Skandinaw'));
+  expect(screen.getByRole('button', { name: 'Termini öçürmek' })).toBeDisabled();
   await fireEvent.changeText(screen.getByLabelText('Русское название'), '');
-  expect(screen.getByRole('button', { name: 'Save term' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Termini ýatda sakla' })).toBeDisabled();
   expect(app.saveDraft).not.toHaveBeenCalled();
 });
 
 test('publication is disabled for an untagged selected photo and presents a friendly location', async () => {
   app.draft!.photos[0].styleId = '';
   await render(<Preview />);
-  expect(screen.getByRole('button', { name: 'Publish these galleries' })).toBeDisabled();
-  expect(screen.getByText(/Choose a valid style.*Bathroom · photo 1/)).toBeOnTheScreen();
+  expect(screen.getByRole('button', { name: 'Bu toplumlary çap etmek' })).toBeDisabled();
+  expect(screen.getByText(/Bar bolan stili saýlaň.*Wanna otagy · surat 1/)).toBeOnTheScreen();
   expect(app.publishDraft).not.toHaveBeenCalled();
 });
 
 test('staff publication reports success only after the save resolves', async () => {
   await render(<Preview />);
-  await fireEvent.press(screen.getByRole('button', { name: 'Publish these galleries' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Bu toplumlary çap etmek' }));
   expect(app.publishDraft).toHaveBeenCalledTimes(1);
-  expect(screen.getByText('Your galleries are ready')).toBeOnTheScreen();
+  expect(screen.getByText('Toplumlar taýyn')).toBeOnTheScreen();
 });
 
 test('gallery search retains the full selection when moving a filtered photo', async () => {
   const before = [...app.draft!.galleries.whole_house];
   const id = before[1];
   await render(<Galleries />);
-  await fireEvent.press(screen.getByRole('button', { name: 'Selected order' }));
-  await fireEvent.changeText(screen.getByLabelText('Search room or style'), id);
-  await fireEvent.press(screen.getByRole('button', { name: 'Move photo earlier' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Görkeziliş tertibi' }));
+  await fireEvent.changeText(screen.getByLabelText('Otag ýa-da stil boýunça gözleg'), id);
+  await fireEvent.press(screen.getByRole('button', { name: 'Suraty öňe süýşürmek' }));
   const saved = jest.mocked(app.saveDraft).mock.calls[0][0] as Catalog;
   expect(saved.galleries.whole_house).toEqual([before[1], before[0], ...before.slice(2)]);
   expect(saved.galleries.bathroom).toEqual(app.draft!.galleries.bathroom);
@@ -82,7 +82,7 @@ test('gallery search retains the full selection when moving a filtered photo', a
 test('photo tiles expose selection state and only remove the chosen gallery entry', async () => {
   const before = [...app.draft!.galleries.whole_house];
   await render(<Galleries />);
-  const tile = screen.getByRole('button', { name: 'Remove photo: Bathroom, Scandinavian, position 1' });
+  const tile = screen.getByRole('button', { name: 'Suraty aýyrmak: Wanna otagy, Skandinaw, orun 1' });
   expect(tile).toBeSelected();
   await fireEvent.press(tile);
   const saved = jest.mocked(app.saveDraft).mock.calls[0][0] as Catalog;
@@ -93,10 +93,10 @@ test('photo tiles expose selection state and only remove the chosen gallery entr
 
 test('publication coverage is optional while publication remains available', async () => {
   await render(<Preview />);
-  expect(screen.queryByText('Scandinavian · 8')).not.toBeOnTheScreen();
-  const coverage = screen.getAllByRole('button', { name: 'Style coverage' })[0];
+  expect(screen.queryByText('Skandinaw · 8')).not.toBeOnTheScreen();
+  const coverage = screen.getAllByRole('button', { name: 'Toplumyň düzümi' })[0];
   expect(coverage).toHaveProp('accessibilityState', { expanded: false });
   await fireEvent.press(coverage);
-  expect(screen.getByText('Scandinavian · 8')).toBeOnTheScreen();
-  expect(screen.getByRole('button', { name: 'Publish these galleries' })).toBeEnabled();
+  expect(screen.getByText('Skandinaw · 8')).toBeOnTheScreen();
+  expect(screen.getByRole('button', { name: 'Bu toplumlary çap etmek' })).toBeEnabled();
 });

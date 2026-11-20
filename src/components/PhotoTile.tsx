@@ -11,7 +11,7 @@ export function PhotoTile({ photo, language, title, subtitle, label, badge, sele
   return <Pressable accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled, selected }} disabled={disabled} onPress={onPress}
     style={({ pressed }) => [styles.tile, selected && styles.selected, disabled && { opacity: 0.55 }, pressed && { opacity: 0.75 }, style]}>
     <View>
-      {photo ? <PhotoImage photo={photo} language={language} thumbnail={thumbnail} style={[styles.image, imageStyle]} /> : <View style={[styles.image, styles.placeholder, imageStyle]}><Text style={typography.small}>{tx(language, 'No photos', 'Нет фото')}</Text></View>}
+      {photo ? <PhotoImage photo={photo} language={language} thumbnail={thumbnail} style={[styles.image, imageStyle]} /> : <View style={[styles.image, styles.placeholder, imageStyle]}><Text style={typography.small}>{tx(language, 'Surat ýok', 'Нет фото')}</Text></View>}
       {badge || selected !== undefined ? <View pointerEvents="none" style={[styles.badge, selected && styles.selectedBadge]}>
         {selected !== undefined ? <Icon name={selected ? 'check' : 'add'} size={20} color={selected ? colors.white : colors.green} fallback={selected ? '✓' : '+'} /> : null}
         {badge ? <Text style={[styles.badgeText, selected && { color: colors.white }]}>{badge}</Text> : null}
@@ -22,7 +22,7 @@ export function PhotoTile({ photo, language, title, subtitle, label, badge, sele
 }
 
 export function PhotoStrip({ photos, language }: { photos: Photo[]; language: Language }) {
-  return <View style={styles.strip}>{photos.length ? photos.slice(0, 4).map(photo => <PhotoImage key={photo.id} photo={photo} thumbnail language={language} style={styles.stripPhoto} />) : <View style={[styles.stripPhoto, styles.placeholder]}><Text style={typography.small}>{tx(language, 'No photos selected', 'Фотографии не выбраны')}</Text></View>}</View>;
+  return <View style={styles.strip}>{photos.length ? photos.slice(0, 4).map(photo => <PhotoImage key={photo.id} photo={photo} thumbnail language={language} style={styles.stripPhoto} />) : <View style={[styles.stripPhoto, styles.placeholder]}><Text style={typography.small}>{tx(language, 'Suratlar saýlanmady', 'Фотографии не выбраны')}</Text></View>}</View>;
 }
 
 const styles = StyleSheet.create({

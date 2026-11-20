@@ -27,7 +27,7 @@ function Wrapper({ children }: { children: ReactNode }) {
 }
 
 beforeEach(() => {
-  mockSnapshot = { catalog: cloneCatalog(seedCatalog), draft: cloneCatalog(seedCatalog), session: null, language: 'en', notices: [] };
+  mockSnapshot = { catalog: cloneCatalog(seedCatalog), draft: cloneCatalog(seedCatalog), session: null, language: 'tk', notices: [] };
   mockSaveDraft.mockClear();
   mockSaveSession.mockClear();
 });
@@ -37,29 +37,29 @@ test('a delayed photo import merges into the latest draft without overwriting la
   await waitFor(() => expect(result.current.ready).toBe(true));
   const capturedBeforeImport = result.current.draft!;
   const edited = cloneCatalog(capturedBeforeImport);
-  edited.terms[0].labels.en = 'Later staff edit';
+  edited.terms[0].labels.tk = 'Later staff edit';
   await act(async () => { await result.current.saveDraft(edited); });
   const imported = { ...capturedBeforeImport.photos[0], id: 'delayed-import' };
   await act(async () => {
     await result.current.saveDraft((current) => ({ ...current, photos: [...current.photos, imported] }));
   });
-  expect(result.current.draft?.terms[0].labels.en).toBe('Later staff edit');
+  expect(result.current.draft?.terms[0].labels.tk).toBe('Later staff edit');
   expect(result.current.draft?.photos.at(-1)?.id).toBe('delayed-import');
-  expect(mockSnapshot.draft.terms[0].labels.en).toBe('Later staff edit');
+  expect(mockSnapshot.draft.terms[0].labels.tk).toBe('Later staff edit');
 });
 
 test('a failed save does not mutate visible state, including mutating functional updaters', async () => {
   const { result } = await renderHook(useApp, { wrapper: Wrapper });
   await waitFor(() => expect(result.current.ready).toBe(true));
-  const original = result.current.draft?.terms[0].labels.en;
+  const original = result.current.draft?.terms[0].labels.tk;
   mockSaveDraft.mockRejectedValueOnce(new Error('Disk full'));
   await act(async () => {
     await expect(result.current.saveDraft((current) => {
-      current.terms[0].labels.en = 'Not saved';
+      current.terms[0].labels.tk = 'Not saved';
       return current;
     })).rejects.toThrow('STORAGE_ERROR');
   });
-  expect(result.current.draft?.terms[0].labels.en).toBe(original);
+  expect(result.current.draft?.terms[0].labels.tk).toBe(original);
   expect(result.current.busy).toBe(false);
 });
 

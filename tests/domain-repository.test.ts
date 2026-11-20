@@ -50,9 +50,9 @@ test('initialization seeds once and persists language, session order, and undo a
   let session = createSession(initial.catalog, 'bathroom', 'saved');
   session = rateSession(session, 'like', session.catalog.galleries.bathroom[0]);
   await repository.saveSession(session);
-  await repository.saveLanguage('en');
+  await repository.saveLanguage('tk');
   const resumed = await repository.loadState();
-  expect(resumed.language).toBe('en');
+  expect(resumed.language).toBe('tk');
   expect(resumed.session?.ratings).toEqual(session.ratings);
   expect(resumed.session?.catalog.id).toBe(initial.catalog.id);
   const savedPayload = sqlite.__database.prepare('SELECT payload FROM active_session').get() as { payload: string };
@@ -67,12 +67,12 @@ test('publishing revisions cannot change an active session or release its photo 
   const removedId = draft.galleries.bathroom[0];
   draft.photos = draft.photos.filter((photo) => photo.id !== removedId);
   for (const space of Object.keys(draft.galleries) as (keyof typeof draft.galleries)[]) draft.galleries[space] = draft.galleries[space].filter((id) => id !== removedId);
-  draft.terms[0].labels.en = 'Renamed for future clients';
+  draft.terms[0].labels.tk = 'Renamed for future clients';
   await repository.saveDraft(draft);
   const published = await repository.publishDraft();
   expect(published.catalog.id).not.toBe(initial.catalog.id);
   const resumed = await repository.loadState();
-  expect(resumed.session?.catalog.terms[0].labels.en).toBe(initial.catalog.terms[0].labels.en);
+  expect(resumed.session?.catalog.terms[0].labels.tk).toBe(initial.catalog.terms[0].labels.tk);
   expect(resumed.session?.catalog.photos.some((photo) => photo.id === removedId)).toBe(true);
   expect((await repository.getReferencedCatalogs()).some((catalog) => catalog.id === initial.catalog.id)).toBe(true);
   await repository.clearSession();
@@ -97,13 +97,13 @@ test('invalid publication retains the current catalog and incomplete library ent
 test('failure midway through publication rolls back the revision and pointer atomically', async () => {
   const initial = await repository.loadState();
   const draft = cloneCatalog(initial.draft);
-  draft.terms[0].labels.en = 'Draft value';
+  draft.terms[0].labels.tk = 'Draft value';
   await repository.saveDraft(draft);
   sqlite.__failPublication();
   await expect(repository.publishDraft()).rejects.toThrow('Simulated full disk');
   const state = await repository.loadState();
   expect(state.catalog).toEqual(initial.catalog);
-  expect(state.draft.terms[0].labels.en).toBe('Draft value');
+  expect(state.draft.terms[0].labels.tk).toBe('Draft value');
   expect(sqlite.__database.prepare('SELECT COUNT(*) AS count FROM catalog_revisions').get()).toEqual({ count: 1 });
   await expect(repository.publishDraft()).resolves.toHaveProperty('catalog.version', 2);
 });

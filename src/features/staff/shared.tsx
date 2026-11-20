@@ -6,7 +6,7 @@ import { useApp } from '../../state/AppProvider';
 import { Language, TermKind } from '../../domain/types';
 
 export function kindLabel(kind: TermKind, language: Language) {
-  const labels: Record<TermKind, [string, string]> = { style: ['Style', 'Стиль'], palette: ['Palette', 'Палитра'], material: ['Materials', 'Материалы'], detail: ['Details', 'Детали'] };
+  const labels: Record<TermKind, [string, string]> = { style: ['Stil', 'Стиль'], palette: ['Palitra', 'Палитра'], material: ['Materiallar', 'Материалы'], detail: ['Aýratynlyklar', 'Детали'] };
   return labels[kind][language === 'ru' ? 1 : 0];
 }
 export function StaffScreen({ children, title, description, scroll = true }: PropsWithChildren<{ title: string; description?: string; scroll?: boolean }>) {
@@ -19,7 +19,7 @@ export function StaffScreen({ children, title, description, scroll = true }: Pro
 function StaffHeader({ title, description }: { title: string; description?: string }) {
   const { language } = useApp();
   return <View style={{ gap: 10 }}>
-    <Header back={{ label: tx(language, 'Staff workspace', 'Кабинет сотрудника'), onPress: () => router.replace('/staff/dashboard') }} />
+    <Header back={{ label: tx(language, 'Işgär otagy', 'Кабинет сотрудника'), onPress: () => router.replace('/staff/dashboard') }} />
     <View style={{ gap: 8 }}><Text accessibilityRole="header" style={typography.heading}>{title}</Text>{description && <Text style={typography.body}>{description}</Text>}</View>
   </View>;
 }

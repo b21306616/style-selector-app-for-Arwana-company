@@ -1,4 +1,4 @@
-export type Language = 'ru' | 'en';
+export type Language = 'ru' | 'tk';
 export type Labels = Record<Language, string>;
 export const ROOMS = ['bathroom', 'bedroom', 'living_room', 'kitchen'] as const;
 export type Room = (typeof ROOMS)[number];

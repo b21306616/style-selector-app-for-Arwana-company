@@ -38,7 +38,7 @@ export function Header({ title = 'ARWANA', subtitle, back, right }: { title?: st
     {right ? <View style={styles.headerRight}>{right}</View> : null}
   </View>;
 }
-export function ErrorBanner({ message, onRetry, retryLabel = 'Retry / Повторить' }: { message: string; onRetry?: () => void; retryLabel?: string }) {
+export function ErrorBanner({ message, onRetry, retryLabel = 'Gaýtalamak / Повторить' }: { message: string; onRetry?: () => void; retryLabel?: string }) {
   return <View style={styles.error} accessibilityRole="alert"><Text style={[typography.small, { color: colors.danger }]}>{message}</Text>{onRetry ? <Button title={retryLabel} variant="secondary" onPress={onRetry} /> : null}</View>;
 }
 export function EmptyState({ title, description, children }: { title: string; description: string; children?: ReactNode }) {

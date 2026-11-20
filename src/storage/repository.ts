@@ -79,7 +79,7 @@ function parseDraft(payload: string | undefined): Catalog {
   // Incomplete editorial metadata is allowed in drafts. Malformed structures are not.
   if (!value || !Array.isArray(value.photos) || !Array.isArray(value.terms) ||
     !value.galleries || SPACES.some((space) => !Array.isArray(value.galleries[space])) ||
-    value.terms.some((term) => !term || typeof term.id !== 'string' || !term.labels || typeof term.labels.en !== 'string' || typeof term.labels.ru !== 'string') ||
+    value.terms.some((term) => !term || typeof term.id !== 'string' || !term.labels || typeof term.labels.tk !== 'string' || typeof term.labels.ru !== 'string') ||
     value.photos.some((photo) => !photo || typeof photo.id !== 'string' || !photo.image || !Array.isArray(photo.paletteIds) || !Array.isArray(photo.materialIds) || !Array.isArray(photo.detailIds))) {
     throw new AppError('DRAFT_DAMAGED');
   }
@@ -129,7 +129,7 @@ async function readState(db: SQLite.SQLiteDatabase): Promise<AppSnapshot> {
     }
   }
   const languageRow = await db.getFirstAsync<{ value: string }>('SELECT value FROM metadata WHERE key = ?', 'language');
-  return { language: languageRow?.value === 'en' ? 'en' : 'ru', catalog, draft, session, notices };
+  return { language: languageRow?.value === 'tk' ? 'tk' : 'ru', catalog, draft, session, notices };
 }
 
 export function loadState(): Promise<AppSnapshot> {
@@ -194,7 +194,7 @@ export function publishDraft(): Promise<{ catalog: Catalog; draft: Catalog }> {
     const db = await database();
     const state = await readState(db);
     const issues = validateCatalog(state.draft);
-    if (issues.length) throw new AppError('INVALID_CATALOG', issues.map((issue) => `${issue.subject}: ${issue.labels.en}`).join('\n'));
+    if (issues.length) throw new AppError('INVALID_CATALOG', issues.map((issue) => `${issue.subject}: ${issue.labels.tk}`).join('\n'));
     const selected = new Set(SPACES.flatMap((space) => state.draft.galleries[space]));
     const version = state.catalog.version + 1;
     const published: Catalog = {

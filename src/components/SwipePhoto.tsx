@@ -33,8 +33,8 @@ export function SwipePhoto({ photo, language, height, enabled, onChoice, onReady
     <View style={styles.backCard} />
     <GestureDetector gesture={gesture} touchAction="pan-y"><Animated.View style={[styles.card, animatedStyle]}>
       <PhotoImage photo={photo} language={language} fit="contain" style={styles.photo} label={label} onReady={onReady} onFailure={onFailure} />
-      <Animated.View pointerEvents="none" style={[styles.badge, styles.like, likeStyle]}><Text style={styles.badgeText}>{tx(language, 'LOVE IT', 'НРАВИТСЯ')}</Text></Animated.View>
-      <Animated.View pointerEvents="none" style={[styles.badge, styles.dislike, dislikeStyle]}><Text style={styles.badgeText}>{tx(language, 'NOT FOR ME', 'НЕ МОЁ')}</Text></Animated.View>
+      <Animated.View pointerEvents="none" style={[styles.badge, styles.like, likeStyle]}><Text style={styles.badgeText}>{tx(language, 'HALADYM', 'НРАВИТСЯ')}</Text></Animated.View>
+      <Animated.View pointerEvents="none" style={[styles.badge, styles.dislike, dislikeStyle]}><Text style={styles.badgeText}>{tx(language, 'MAŇA DÄL', 'НЕ МОЁ')}</Text></Animated.View>
     </Animated.View></GestureDetector>
   </View>;
 }

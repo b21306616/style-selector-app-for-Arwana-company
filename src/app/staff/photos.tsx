@@ -22,10 +22,10 @@ export default function StaffPhotos() {
   const [importing, setImporting] = useState(false);
   const [progress, setProgress] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const t = (en: string, ru: string) => tx(language, en, ru);
+  const t = (tk: string, ru: string) => tx(language, tk, ru);
   const items = useMemo(() => {
     if (!draft) return [];
-    const termMap = new Map(draft.terms.map(term => [term.id, `${term.labels.en} ${term.labels.ru}`]));
+    const termMap = new Map(draft.terms.map(term => [term.id, `${term.labels.tk} ${term.labels.ru}`]));
     const query = search.trim().toLocaleLowerCase();
     return draft.photos.filter(photo => (room === 'all' || photo.room === room) && (!query || [spaceLabel(photo.room, language), photo.id, ...[photo.styleId, ...photo.paletteIds, ...photo.materialIds, ...photo.detailIds].map(id => termMap.get(id) ?? '')].join(' ').toLocaleLowerCase().includes(query)));
   }, [draft, room, search, language]);
@@ -65,36 +65,36 @@ export default function StaffPhotos() {
     finally { setImporting(false); setProgress(''); }
   }
   return <>
-    <StaffList title={t('Photo library', 'Библиотека фотографий')} key={columns} data={items} numColumns={columns} keyExtractor={photo => photo.id} initialNumToRender={8} maxToRenderPerBatch={8} windowSize={5} columnWrapperStyle={columns > 1 ? { gap: 12 } : undefined} contentContainerStyle={{ gap: 16, paddingBottom: 24 }} header={<View style={s.section}>
-        <Button title={importing ? `${t('Preparing photos', 'Подготовка фотографий')} ${progress}` : t('＋ Import photos', '＋ Добавить фотографии')} onPress={() => void addPhotos()} loading={importing} disabled={busy} />
-        <TextField label={t('Search photos', 'Поиск фотографий')} value={search} onChangeText={setSearch} placeholder={t('Room, style, or feature', 'Комната, стиль или особенность')} />
-        <View style={s.row}><Chip label={t('All rooms', 'Все комнаты')} selected={room === 'all'} onPress={() => setRoom('all')} />{ROOMS.map(value => <Chip key={value} label={spaceLabel(value, language)} selected={room === value} onPress={() => setRoom(value)} />)}</View>
+    <StaffList title={t('Suratlar', 'Библиотека фотографий')} key={columns} data={items} numColumns={columns} keyExtractor={photo => photo.id} initialNumToRender={8} maxToRenderPerBatch={8} windowSize={5} columnWrapperStyle={columns > 1 ? { gap: 12 } : undefined} contentContainerStyle={{ gap: 16, paddingBottom: 24 }} header={<View style={s.section}>
+        <Button title={importing ? `${t('Suratlar taýýarlanýar', 'Подготовка фотографий')} ${progress}` : t('＋ Surat goşmak', '＋ Добавить фотографии')} onPress={() => void addPhotos()} loading={importing} disabled={busy} />
+        <TextField label={t('Surat gözlegi', 'Поиск фотографий')} value={search} onChangeText={setSearch} placeholder={t('Otag, stil ýa-da aýratynlyk', 'Комната, стиль или особенность')} />
+        <View style={s.row}><Chip label={t('Ähli otaglar', 'Все комнаты')} selected={room === 'all'} onPress={() => setRoom('all')} />{ROOMS.map(value => <Chip key={value} label={spaceLabel(value, language)} selected={room === value} onPress={() => setRoom(value)} />)}</View>
         {error && !editing && <ErrorBanner message={error} />}
-      </View>} ListEmptyComponent={<Text style={typography.body}>{t('No matching photos. Import some to begin.', 'Подходящих фотографий нет. Добавьте первые изображения.')}</Text>} renderItem={({ item }) => {
+      </View>} ListEmptyComponent={<Text style={typography.body}>{t('Gabat gelýän surat ýok. Başlamak üçin birnäçe surat goşuň.', 'Подходящих фотографий нет. Добавьте первые изображения.')}</Text>} renderItem={({ item }) => {
         const style = draft.terms.find(term => term.id === item.styleId);
         const complete = style && item.paletteIds.length && item.materialIds.length && item.detailIds.length;
-        return <PhotoTile photo={item} language={language} title={spaceLabel(item.room, language)} subtitle={complete ? style.labels[language] : undefined} badge={complete ? undefined : t('Needs tags', 'Нужны теги')} label={spaceLabel(item.room, language) + ', ' + (style?.labels[language] ?? t('Needs tags', 'Нужны теги'))}
+        return <PhotoTile photo={item} language={language} title={spaceLabel(item.room, language)} subtitle={complete ? style.labels[language] : undefined} badge={complete ? undefined : t('Tegler gerek', 'Нужны теги')} label={spaceLabel(item.room, language) + ', ' + (style?.labels[language] ?? t('Tegler gerek', 'Нужны теги'))}
           onPress={() => { setEditing({ ...item, paletteIds: [...item.paletteIds], materialIds: [...item.materialIds], detailIds: [...item.detailIds] }); setError(null); }}
           style={{ width: (contentWidth - (columns - 1) * 12) / columns }} />;
       }} />
     <AppModal visible={!!editing} animationType="slide" onRequestClose={close}>
-      {editing && <Screen><Header back={{ label: t('Photo library', 'Библиотека'), onPress: close }} />
+      {editing && <Screen><Header back={{ label: t('Suratlar', 'Библиотека'), onPress: close }} />
         <View style={{ flexDirection: wide ? 'row' : 'column', gap: 20, alignItems: 'flex-start' }}>
         <PhotoImage key={editing.id} photo={editing} language={language} fit="contain" style={{ width: wide ? '46%' : '100%', height: Math.min(tablet ? 400 : 300, contentWidth * editing.height / editing.width), borderRadius: 18 }} />
         <View style={{ flex: 1, width: wide ? undefined : '100%', gap: 16 }}>
-        <View style={s.section}><Text style={s.label}>{t('Room', 'Комната')}</Text><View style={s.row}>{ROOMS.map(value => <Chip key={value} label={spaceLabel(value, language)} selected={editing.room === value} onPress={() => setEditing({ ...editing, room: value })} />)}</View></View>
+        <View style={s.section}><Text style={s.label}>{t('Otag', 'Комната')}</Text><View style={s.row}>{ROOMS.map(value => <Chip key={value} label={spaceLabel(value, language)} selected={editing.room === value} onPress={() => setEditing({ ...editing, room: value })} />)}</View></View>
         <View style={s.section}><Text style={s.label}>{kindLabel('style', language)}</Text><View style={s.row}>{draft.terms.filter(term => term.kind === 'style').map(term => <Chip key={term.id} label={term.labels[language]} selected={editing.styleId === term.id} onPress={() => setEditing({ ...editing, styleId: term.id })} />)}</View></View>
         {(['palette', 'material', 'detail'] as const).map(kind => {
           const field = kind === 'palette' ? 'paletteIds' : kind === 'material' ? 'materialIds' : 'detailIds';
           return <View key={kind} style={s.section}><Text style={s.label}>{kindLabel(kind, language)}</Text><View style={s.row}>{draft.terms.filter(term => term.kind === kind).map(term => <Chip key={term.id} label={term.labels[language]} selected={editing[field].includes(term.id)} onPress={() => setEditing({ ...editing, [field]: editing[field].includes(term.id) ? editing[field].filter(id => id !== term.id) : [...editing[field], term.id] })} />)}</View></View>;
         })}
-        <Text style={typography.small}>{t('Required: one style and at least one tag per category. Changing rooms removes this photo from its previous room gallery.', 'Нужен один стиль и хотя бы один тег каждой категории. При смене комнаты фото удалится из прежней комнатной подборки.')}</Text>
+        <Text style={typography.small}>{t('Talap edilýär: bir stil we her kategoriýadan azyndan bir teg. Otagy üýtgetmek bu suraty öňki otag toplumyndan aýyrýar.', 'Нужен один стиль и хотя бы один тег каждой категории. При смене комнаты фото удалится из прежней комнатной подборки.')}</Text>
         {error && <ErrorBanner message={error} />}
-        <Button title={t('Save photo', 'Сохранить фотографию')} onPress={() => void save()} loading={busy} />
-        <Button title={t('Remove from draft', 'Удалить из черновика')} onPress={() => setDeleting(true)} variant="ghost" disabled={busy} />
+        <Button title={t('Suraty ýatda sakla', 'Сохранить фотографию')} onPress={() => void save()} loading={busy} />
+        <Button title={t('Garalamadan aýyrmak', 'Удалить из черновика')} onPress={() => setDeleting(true)} variant="ghost" disabled={busy} />
         </View></View>
-        <ConfirmDialog visible={discard} language={language} title={t('Discard unsaved edits?', 'Отменить несохранённые изменения?')} description={t('This photo will keep its last saved details.', 'У фотографии останутся последние сохранённые данные.')} confirmLabel={t('Discard edits', 'Отменить изменения')} cancelLabel={t('Keep editing', 'Продолжить редактирование')} onCancel={() => setDiscard(false)} onConfirm={() => { setDiscard(false); setEditing(null); setError(null); }} />
-        <ConfirmDialog visible={deleting} language={language} loading={busy} title={t('Remove this photo?', 'Удалить фотографию?')} description={t('It will be removed from every draft gallery. Published galleries and active clients remain available until a new catalog is published.', 'Фото будет удалено из всех подборок черновика. Опубликованные подборки и текущие сеансы сохранятся.')} confirmLabel={t('Remove photo', 'Удалить фотографию')} cancelLabel={t('Cancel', 'Отмена')} onCancel={() => setDeleting(false)} onConfirm={() => void remove()} />
+        <ConfirmDialog visible={discard} language={language} title={t('Ýatda saklanmadyk üýtgeşmeleri ýatyrmak isleýärsiňizmi?', 'Отменить несохранённые изменения?')} description={t('Bu surat soňky ýatda saklanan maglumatlaryny saklar.', 'У фотографии останутся последние сохранённые данные.')} confirmLabel={t('Üýtgeşmeleri ýatyrmak', 'Отменить изменения')} cancelLabel={t('Redaktirlemegi dowam etmek', 'Продолжить редактирование')} onCancel={() => setDiscard(false)} onConfirm={() => { setDiscard(false); setEditing(null); setError(null); }} />
+        <ConfirmDialog visible={deleting} language={language} loading={busy} title={t('Bu suraty aýyrmak isleýärsiňizmi?', 'Удалить фотографию?')} description={t('Ol garalamanyň ähli toplumlaryndan aýrylar. Çap edilen toplumlar we işjeň müşderiler täze katalog çap edilýänçä elýeterli bolar.', 'Фото будет удалено из всех подборок черновика. Опубликованные подборки и текущие сеансы сохранятся.')} confirmLabel={t('Suraty aýyrmak', 'Удалить фотографию')} cancelLabel={t('Ýatyrmak', 'Отмена')} onCancel={() => setDeleting(false)} onConfirm={() => void remove()} />
       </Screen>}
     </AppModal>
   </>;

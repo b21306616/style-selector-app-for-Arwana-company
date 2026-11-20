@@ -15,7 +15,7 @@ export function ConfirmDialog({ visible, title, description, confirmLabel, cance
         <View accessibilityViewIsModal style={styles.panel}>
           <Text accessibilityRole="header" style={typography.heading}>{title}</Text><Text style={typography.body}>{description}</Text>
           <Button title={confirmLabel} onPress={onConfirm} loading={loading} />
-          <Button title={cancelLabel ?? tx(language, 'Keep this session', 'Продолжить сеанс')} onPress={cancel} variant="ghost" disabled={loading} />
+          <Button title={cancelLabel ?? tx(language, 'Saýlamagy dowam etmek', 'Продолжить сеанс')} onPress={cancel} variant="ghost" disabled={loading} />
         </View>
       </ScrollView>
     </SafeAreaView>

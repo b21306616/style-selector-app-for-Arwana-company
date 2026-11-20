@@ -23,7 +23,7 @@ Open **Staff** at the bottom of the home screen. On first use, create and repeat
 ## Prepare the catalog / Подготовка каталога
 
 1. **Photo library:** import up to 20 photos at a time from the device library. Use locally available photographs when offline. Assign a room, one primary style, and at least one palette, material, and detail tag to each photo selected for a gallery. Save each photo. Changing its room removes it from the former room gallery.
-2. **Styles & features:** add or rename vocabulary entries with both Russian and English labels. Reassign a referenced term on its photos before deleting it.
+2. **Styles & features:** add or rename vocabulary entries with both Russian and Turkmen labels. Reassign a referenced term on its photos before deleting it.
 3. **Galleries:** tap a photo tile to add or remove it. A green border and checkmark indicate selection; the number is its position in that gallery. Open **Selected order** and use the arrow buttons to reorder. Whole House is independent of the room galleries. Changes save to the draft immediately. Empty galleries are unavailable to clients.
 4. **Review & publish:** review the photo strips, counts, and validation messages. Expand **Style coverage** for the breakdown. Publish to activate all edited galleries together for new clients. Existing sessions keep their original catalog and labels. The dashboard labels published and draft counts separately.
 

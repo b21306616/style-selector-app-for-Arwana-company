@@ -21,7 +21,7 @@ If a connection fails, check the matching SDK version, Wi-Fi network, Expo accou
 
 ## First review on each device
 
-Use English or Russian from the home screen. The default is Russian. The two devices keep separate client sessions, catalogs, staff credentials, and language settings.
+Use Turkmen or Russian from the home screen. The default is Russian. The two devices keep separate client sessions, catalogs, staff credentials, and language settings.
 
 | Step | What to do | Expected behavior |
 | --- | --- | --- |

@@ -57,7 +57,7 @@ Use the [Android/iOS preview walkthrough](device-preview.md) with an SDK 58-comp
 | Area | Acceptance steps |
 | --- | --- |
 | Phones and tablets | Review narrow phones (about 320–430 logical pixels wide), Android tablets, and iPad sizes (about 768–1,366 logical pixels). Rotate through portrait and landscape, including notched devices and split-screen where supported. |
-| Language and accessibility | Check Russian and English, system text sizes of 100%, 150%, and 200%, screen-reader labels and order, reduced motion, keyboard visibility, safe areas, and comfortable touch targets. |
+| Language and accessibility | Check Russian and Turkmen, system text sizes of 100%, 150%, and 200%, screen-reader labels and order, reduced motion, keyboard visibility, safe areas, and comfortable touch targets. |
 | Client flow | Rate with swipes and buttons, tap quickly, undo, inspect a preliminary result after 20 ratings, continue, finish a short gallery, view liked photos, cancel/confirm a new client, and restart the app to resume. Style labels must remain hidden while rating. |
 | Staff workflow | Set the first PIN, record and use its recovery code, exercise the five-failure cooldown, background the app during unlock, leave staff mode, import photos, edit vocabulary, reorder galleries, and publish. An existing client must retain its original catalog. |
 | Native photo handling | Test permission denial, canceled selection, large camera photos, HEIC/rotated images, low storage, app backgrounding during import, and imported-image availability after restarting. |

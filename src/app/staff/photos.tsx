@@ -1,7 +1,8 @@
 import { useMemo, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
-import { Button, Chip, ErrorBanner, Header, Screen, TextField, colors, typography, spaceLabel, tx, useLayout } from '../../components/ui';
+import { Text, View } from 'react-native';
+import { Button, Chip, ErrorBanner, Header, Screen, TextField, typography, spaceLabel, tx, useLayout } from '../../components/ui';
 import { PhotoImage } from '../../components/PhotoImage';
+import { PhotoTile } from '../../components/PhotoTile';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { AppModal } from '../../components/AppModal';
 import { useApp } from '../../state/AppProvider';
@@ -12,7 +13,7 @@ import { StaffList, kindLabel, staffStyles as s } from '../../features/staff/sha
 
 export default function StaffPhotos() {
   const { draft, language, saveDraft, busy } = useApp();
-  const { contentWidth, tablet, fontScale } = useLayout();
+  const { contentWidth, tablet, wide, columns } = useLayout();
   const [room, setRoom] = useState<Room | 'all'>('all');
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<Photo | null>(null);
@@ -22,7 +23,6 @@ export default function StaffPhotos() {
   const [progress, setProgress] = useState('');
   const [error, setError] = useState<string | null>(null);
   const t = (en: string, ru: string) => tx(language, en, ru);
-  const columns = fontScale >= 1.5 || contentWidth < 300 ? 1 : tablet ? Math.max(2, Math.floor(contentWidth / 230)) : 2;
   const items = useMemo(() => {
     if (!draft) return [];
     const termMap = new Map(draft.terms.map(term => [term.id, `${term.labels.en} ${term.labels.ru}`]));
@@ -66,7 +66,6 @@ export default function StaffPhotos() {
   }
   return <>
     <StaffList title={t('Photo library', 'Библиотека фотографий')} key={columns} data={items} numColumns={columns} keyExtractor={photo => photo.id} initialNumToRender={8} maxToRenderPerBatch={8} windowSize={5} columnWrapperStyle={columns > 1 ? { gap: 12 } : undefined} contentContainerStyle={{ gap: 16, paddingBottom: 24 }} header={<View style={s.section}>
-        <Text style={typography.body}>{t('Add photographs, then describe their room, style, and features. Select them for clients in Galleries.', 'Добавьте фотографии, укажите комнату, стиль и особенности. Выбор для клиентов — в разделе «Подборки».')}</Text>
         <Button title={importing ? `${t('Preparing photos', 'Подготовка фотографий')} ${progress}` : t('＋ Import photos', '＋ Добавить фотографии')} onPress={() => void addPhotos()} loading={importing} disabled={busy} />
         <TextField label={t('Search photos', 'Поиск фотографий')} value={search} onChangeText={setSearch} placeholder={t('Room, style, or feature', 'Комната, стиль или особенность')} />
         <View style={s.row}><Chip label={t('All rooms', 'Все комнаты')} selected={room === 'all'} onPress={() => setRoom('all')} />{ROOMS.map(value => <Chip key={value} label={spaceLabel(value, language)} selected={room === value} onPress={() => setRoom(value)} />)}</View>
@@ -74,25 +73,26 @@ export default function StaffPhotos() {
       </View>} ListEmptyComponent={<Text style={typography.body}>{t('No matching photos. Import some to begin.', 'Подходящих фотографий нет. Добавьте первые изображения.')}</Text>} renderItem={({ item }) => {
         const style = draft.terms.find(term => term.id === item.styleId);
         const complete = style && item.paletteIds.length && item.materialIds.length && item.detailIds.length;
-        return <Pressable accessibilityRole="button" accessibilityLabel={`${spaceLabel(item.room, language)}, ${style?.labels[language] ?? t('Needs tags', 'Нужны теги')}`} onPress={() => { setEditing({ ...item, paletteIds: [...item.paletteIds], materialIds: [...item.materialIds], detailIds: [...item.detailIds] }); setError(null); }} style={{ width: (contentWidth - (columns - 1) * 12) / columns, gap: 8 }}>
-          <PhotoImage photo={item} thumbnail language={language} style={{ aspectRatio: 1.3, borderRadius: 16 }} />
-          <Text style={[typography.small, { color: colors.ink }]}>{spaceLabel(item.room, language)}</Text><Text style={typography.small}>{complete ? style.labels[language] : t('Add style & feature tags', 'Укажите стиль и особенности')}</Text>
-        </Pressable>;
+        return <PhotoTile photo={item} language={language} title={spaceLabel(item.room, language)} subtitle={complete ? style.labels[language] : undefined} badge={complete ? undefined : t('Needs tags', 'Нужны теги')} label={spaceLabel(item.room, language) + ', ' + (style?.labels[language] ?? t('Needs tags', 'Нужны теги'))}
+          onPress={() => { setEditing({ ...item, paletteIds: [...item.paletteIds], materialIds: [...item.materialIds], detailIds: [...item.detailIds] }); setError(null); }}
+          style={{ width: (contentWidth - (columns - 1) * 12) / columns }} />;
       }} />
     <AppModal visible={!!editing} animationType="slide" onRequestClose={close}>
       {editing && <Screen><Header back={{ label: t('Photo library', 'Библиотека'), onPress: close }} />
-        <Text style={typography.heading}>{t('Describe this interior', 'Опишите этот интерьер')}</Text>
-        <PhotoImage key={editing.id} photo={editing} language={language} fit="contain" style={{ height: tablet ? 340 : 230, borderRadius: 18 }} />
+        <View style={{ flexDirection: wide ? 'row' : 'column', gap: 20, alignItems: 'flex-start' }}>
+        <PhotoImage key={editing.id} photo={editing} language={language} fit="contain" style={{ width: wide ? '46%' : '100%', height: Math.min(tablet ? 400 : 300, contentWidth * editing.height / editing.width), borderRadius: 18 }} />
+        <View style={{ flex: 1, width: wide ? undefined : '100%', gap: 16 }}>
         <View style={s.section}><Text style={s.label}>{t('Room', 'Комната')}</Text><View style={s.row}>{ROOMS.map(value => <Chip key={value} label={spaceLabel(value, language)} selected={editing.room === value} onPress={() => setEditing({ ...editing, room: value })} />)}</View></View>
         <View style={s.section}><Text style={s.label}>{kindLabel('style', language)}</Text><View style={s.row}>{draft.terms.filter(term => term.kind === 'style').map(term => <Chip key={term.id} label={term.labels[language]} selected={editing.styleId === term.id} onPress={() => setEditing({ ...editing, styleId: term.id })} />)}</View></View>
         {(['palette', 'material', 'detail'] as const).map(kind => {
           const field = kind === 'palette' ? 'paletteIds' : kind === 'material' ? 'materialIds' : 'detailIds';
           return <View key={kind} style={s.section}><Text style={s.label}>{kindLabel(kind, language)}</Text><View style={s.row}>{draft.terms.filter(term => term.kind === kind).map(term => <Chip key={term.id} label={term.labels[language]} selected={editing[field].includes(term.id)} onPress={() => setEditing({ ...editing, [field]: editing[field].includes(term.id) ? editing[field].filter(id => id !== term.id) : [...editing[field], term.id] })} />)}</View></View>;
         })}
-        <Text style={typography.small}>{t('Choose one style and at least one feature in every category before publishing. Changing rooms removes this photo from its previous room gallery.', 'Перед публикацией выберите один стиль и хотя бы один тег каждой категории. При смене комнаты фото удалится из прежней комнатной подборки.')}</Text>
+        <Text style={typography.small}>{t('Required: one style and at least one tag per category. Changing rooms removes this photo from its previous room gallery.', 'Нужен один стиль и хотя бы один тег каждой категории. При смене комнаты фото удалится из прежней комнатной подборки.')}</Text>
         {error && <ErrorBanner message={error} />}
         <Button title={t('Save photo', 'Сохранить фотографию')} onPress={() => void save()} loading={busy} />
         <Button title={t('Remove from draft', 'Удалить из черновика')} onPress={() => setDeleting(true)} variant="ghost" disabled={busy} />
+        </View></View>
         <ConfirmDialog visible={discard} language={language} title={t('Discard unsaved edits?', 'Отменить несохранённые изменения?')} description={t('This photo will keep its last saved details.', 'У фотографии останутся последние сохранённые данные.')} confirmLabel={t('Discard edits', 'Отменить изменения')} cancelLabel={t('Keep editing', 'Продолжить редактирование')} onCancel={() => setDiscard(false)} onConfirm={() => { setDiscard(false); setEditing(null); setError(null); }} />
         <ConfirmDialog visible={deleting} language={language} loading={busy} title={t('Remove this photo?', 'Удалить фотографию?')} description={t('It will be removed from every draft gallery. Published galleries and active clients remain available until a new catalog is published.', 'Фото будет удалено из всех подборок черновика. Опубликованные подборки и текущие сеансы сохранятся.')} confirmLabel={t('Remove photo', 'Удалить фотографию')} cancelLabel={t('Cancel', 'Отмена')} onCancel={() => setDeleting(false)} onConfirm={() => void remove()} />
       </Screen>}

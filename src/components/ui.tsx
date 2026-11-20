@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type StyleProp, type TextInputProps, type ViewStyle } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, typography, useLayout } from '../ui/theme';
+import { IconButton } from './Icon';
 export { colors, typography, useLayout } from '../ui/theme';
 export { tx, spaceLabel, photoCount, errorText } from '../ui/copy';
 
@@ -33,7 +34,7 @@ export function Chip({ label, selected = false, onPress, style }: { label: strin
 }
 export function Header({ title = 'ARWANA', subtitle, back, right }: { title?: string; subtitle?: string; back?: { label: string; onPress: () => void }; right?: ReactNode }) {
   return <View style={styles.header}>
-    <View style={styles.headerLeft}>{back ? <Button title={back.label} icon="←" onPress={back.onPress} variant="ghost" style={styles.back} /> : <><Text style={styles.wordmark}>{title}</Text>{subtitle ? <Text style={styles.brandCaption}>{subtitle}</Text> : null}</>}</View>
+    <View style={styles.headerLeft}>{back ? <IconButton icon="back" label={back.label} onPress={back.onPress} /> : <><Text accessibilityRole={title === 'ARWANA' ? undefined : 'header'} style={title === 'ARWANA' ? styles.wordmark : typography.subheading}>{title}</Text>{subtitle ? <Text style={styles.brandCaption}>{subtitle}</Text> : null}</>}</View>
     {right ? <View style={styles.headerRight}>{right}</View> : null}
   </View>;
 }
@@ -51,7 +52,7 @@ export const uiStyles = StyleSheet.create({
 });
 const styles = StyleSheet.create({
   safe: { flex: 1, backgroundColor: colors.background },
-  content: { flexGrow: 1, width: '100%', maxWidth: 1264, alignSelf: 'center', paddingTop: 12, paddingBottom: 24, gap: 24 },
+  content: { flexGrow: 1, width: '100%', maxWidth: 1248, alignSelf: 'center', paddingTop: 8, paddingBottom: 16, gap: 16 },
   button: { minHeight: 48, paddingHorizontal: 20, paddingVertical: 13, borderRadius: 14, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 9, borderWidth: 1, borderColor: 'transparent' },
   primary: { backgroundColor: colors.green }, secondary: { backgroundColor: colors.surface, borderColor: colors.border }, danger: { backgroundColor: colors.danger }, ghost: { backgroundColor: 'transparent', paddingHorizontal: 8 },
   buttonText: { fontSize: 15, lineHeight: 21, fontWeight: '600', textAlign: 'center', color: colors.ink, flexShrink: 1 }, buttonIcon: { fontSize: 22, color: colors.ink }, lightText: { color: colors.white }, disabled: { opacity: 0.45 }, pressed: { opacity: 0.72 },

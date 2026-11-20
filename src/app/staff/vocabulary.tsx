@@ -1,7 +1,8 @@
 import * as Crypto from 'expo-crypto';
 import { useMemo, useState } from 'react';
-import { Pressable, Text, View } from 'react-native';
-import { Button, Chip, ErrorBanner, Header, Screen, TextField, colors, typography, tx } from '../../components/ui';
+import { Text, View } from 'react-native';
+import { Button, Chip, ErrorBanner, Header, Screen, TextField, typography, tx, useLayout } from '../../components/ui';
+import { PhotoTile } from '../../components/PhotoTile';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { AppModal } from '../../components/AppModal';
 import { useApp } from '../../state/AppProvider';
@@ -12,6 +13,7 @@ import { StaffList, kindLabel, staffStyles as s } from '../../features/staff/sha
 
 export default function Vocabulary() {
   const { draft, language, saveDraft, busy } = useApp();
+  const { columns, contentWidth } = useLayout();
   const [kind, setKind] = useState<TermKind>('style');
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<Term | null>(null);
@@ -40,14 +42,14 @@ export default function Vocabulary() {
     catch (e) { setError(messageForError(e, language)); setDeleting(false); }
   }
   return <>
-    <StaffList title={t('Styles & features', 'Стили и особенности')} data={terms} keyExtractor={term => term.id} initialNumToRender={16} windowSize={5} contentContainerStyle={{ paddingBottom: 24 }} header={<View style={s.section}>
-        <Text style={typography.body}>{t('Every name has a Russian and English version. Clients see these names only in their results.', 'У каждого названия есть русская и английская версия. Клиенты увидят их только в результатах.')}</Text>
+    <StaffList title={t('Styles & features', 'Стили и особенности')} key={columns} data={terms} numColumns={columns} columnWrapperStyle={columns > 1 ? { gap: 12 } : undefined} keyExtractor={term => term.id} initialNumToRender={16} windowSize={5} contentContainerStyle={{ paddingBottom: 24 }} header={<View style={s.section}>
         <View style={s.row}>{(['style', 'palette', 'material', 'detail'] as const).map(value => <Chip key={value} label={kindLabel(value, language)} selected={kind === value} onPress={() => setKind(value)} />)}</View>
         <TextField label={t('Search vocabulary', 'Поиск по словарю')} value={search} onChangeText={setSearch} />
         <Button title={t('＋ Add term', '＋ Добавить термин')} onPress={() => { setEditing({ id: Crypto.randomUUID(), kind, labels: { en: '', ru: '' } }); setError(null); }} />
-      </View>} ListEmptyComponent={<Text style={typography.body}>{t('No matching terms.', 'Подходящих терминов нет.')}</Text>} renderItem={({ item }) => <Pressable accessibilityRole="button" onPress={() => { setEditing({ ...item, labels: { ...item.labels } }); setError(null); }} style={s.line}>
-        <View style={{ flex: 1, gap: 4 }}><Text style={typography.subheading}>{item.labels[language]}</Text><Text style={typography.small}>{item.labels[language === 'ru' ? 'en' : 'ru']}</Text></View><Text style={{ color: colors.green, fontSize: 22 }}>→</Text>
-      </Pressable>} />
+      </View>} ListEmptyComponent={<Text style={typography.body}>{t('No matching terms.', 'Подходящих терминов нет.')}</Text>} renderItem={({ item }) => {
+        const example = draft.photos.find(photo => item.kind === 'style' ? photo.styleId === item.id : item.kind === 'palette' ? photo.paletteIds.includes(item.id) : item.kind === 'material' ? photo.materialIds.includes(item.id) : photo.detailIds.includes(item.id));
+        return <PhotoTile photo={example} language={language} title={item.labels[language]} label={item.labels[language]} onPress={() => { setEditing({ ...item, labels: { ...item.labels } }); setError(null); }} style={{ width: (contentWidth - (columns - 1) * 12) / columns, marginBottom: 12 }} />;
+      }} />
     <AppModal visible={!!editing} animationType="slide" onRequestClose={close}>{editing && <Screen>
       <Header back={{ label: t('Vocabulary', 'Словарь'), onPress: close }} />
       <Text style={typography.heading}>{original ? t('Edit term', 'Редактировать термин') : t('New term', 'Новый термин')}</Text><Chip label={kindLabel(editing.kind, language)} />

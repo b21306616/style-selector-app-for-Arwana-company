@@ -21,4 +21,4 @@ export function ConfirmDialog({ visible, title, description, confirmLabel, cance
     </SafeAreaView>
   </AppModal>;
 }
-const styles = StyleSheet.create({ overlay: { flex: 1, backgroundColor: colors.overlay }, scrollContent: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 24 }, panel: { width: '100%', maxWidth: 440, padding: 28, gap: 20, borderRadius: 24, backgroundColor: colors.surface } });
+const styles = StyleSheet.create({ overlay: { flex: 1, backgroundColor: colors.overlay }, scrollContent: { flexGrow: 1, justifyContent: 'center', alignItems: 'center', padding: 16 }, panel: { width: '100%', maxWidth: 440, padding: 20, gap: 16, borderRadius: 24, backgroundColor: colors.surface } });

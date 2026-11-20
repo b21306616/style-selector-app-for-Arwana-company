@@ -1,7 +1,9 @@
 import { useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
-import { Button, Chip, ErrorBanner, TextField, typography, spaceLabel, tx } from '../../components/ui';
-import { PhotoImage } from '../../components/PhotoImage';
+import { Chip, ErrorBanner, TextField, typography, spaceLabel, tx, useLayout } from '../../components/ui';
+import { PhotoTile } from '../../components/PhotoTile';
+import { IconButton } from '../../components/Icon';
+import { Disclosure } from '../../components/Disclosure';
 import { useApp } from '../../state/AppProvider';
 import { SPACES, Space } from '../../domain/types';
 import { messageForError } from '../../domain/errors';
@@ -9,6 +11,7 @@ import { StaffList, staffStyles as s } from '../../features/staff/shared';
 
 export default function Galleries() {
   const { draft, language, saveDraft, busy } = useApp();
+  const { contentWidth, columns } = useLayout();
   const [space, setSpace] = useState<Space>('whole_house');
   const [selectedOnly, setSelectedOnly] = useState(false);
   const [search, setSearch] = useState('');
@@ -36,22 +39,20 @@ export default function Galleries() {
     const next = [...deck]; [next[index], next[target]] = [next[target], next[index]];
     void update(next);
   }
-  return <StaffList title={t('Curate galleries', 'Подборки для клиентов')} data={photos} keyExtractor={photo => photo.id} initialNumToRender={8} maxToRenderPerBatch={8} windowSize={5} contentContainerStyle={{ paddingBottom: 24 }} header={<View style={s.section}>
+  return <StaffList title={t('Galleries', 'Подборки')} key={columns} data={photos} numColumns={columns} columnWrapperStyle={columns > 1 ? { gap: 12 } : undefined} keyExtractor={photo => photo.id} initialNumToRender={8} maxToRenderPerBatch={8} windowSize={5} contentContainerStyle={{ paddingBottom: 24 }} header={<View style={s.section}>
       <View style={s.row}>{SPACES.map(value => <Chip key={value} label={spaceLabel(value, language)} selected={space === value} onPress={() => { setSpace(value); setSearch(''); }} />)}</View>
-      <Text style={typography.body}>{deck.length} {t('photos selected. Changes save to your draft immediately.', 'фото выбрано. Изменения сразу сохраняются в черновик.')}</Text>
-      <Text style={typography.small}>{t('Choose “Selected order” to arrange the sequence. Whole House is an independent selection and may include any room. An empty gallery is unavailable to clients.', 'Выберите «Порядок показа», чтобы упорядочить фотографии. «Весь дом» — независимая подборка из любых комнат. Пустая подборка будет недоступна клиентам.')}</Text>
-      <View style={s.row}><Chip label={t('Photo library', 'Библиотека')} selected={!selectedOnly} onPress={() => setSelectedOnly(false)} /><Chip label={t('Selected order', 'Порядок показа')} selected={selectedOnly} onPress={() => setSelectedOnly(true)} /></View>
+      <View style={s.row}><Text style={typography.small}>{deck.length} {t('selected', 'выбрано')} · {t('Draft', 'Черновик')}</Text><Chip label={t('Photo library', 'Библиотека')} selected={!selectedOnly} onPress={() => setSelectedOnly(false)} /><Chip label={t('Selected order', 'Порядок показа')} selected={selectedOnly} onPress={() => setSelectedOnly(true)} /></View>
       <TextField label={t('Search room or style', 'Поиск по комнате или стилю')} value={search} onChangeText={setSearch} />
+      <Disclosure title={t('Selection help', 'Как выбрать фото')}><Text style={typography.small}>{t('Tap + to select, ✓ to remove. Use arrows in Selected order to reorder. Changes save to the draft. Whole House is independent; empty galleries are unavailable to clients.', 'Нажмите +, чтобы выбрать, ✓ — убрать. Меняйте порядок стрелками в «Порядке показа». Изменения сохраняются в черновик. «Весь дом» — отдельная подборка; пустые подборки недоступны клиентам.')}</Text></Disclosure>
       {error && <ErrorBanner message={error} />}
-    </View>} ListEmptyComponent={<Text style={typography.body}>{t('No photos here yet. Import photos or select them from the library.', 'Здесь пока нет фотографий. Добавьте их или выберите из библиотеки.')}</Text>} renderItem={({ item }) => {
+    </View>} ListEmptyComponent={<Text style={typography.body}>{t('No photos found. Import photos or change your filters.', 'Фото не найдены. Добавьте фотографии или измените фильтры.')}</Text>} renderItem={({ item }) => {
       const position = deck.indexOf(item.id);
       const style = draft.terms.find(term => term.id === item.styleId);
-      return <View style={[s.line, { flexWrap: 'wrap' }]}>
-        <PhotoImage photo={item} thumbnail language={language} style={s.thumbnail} />
-        <View style={{ flex: 1, minWidth: 100, gap: 4 }}><Text style={typography.small}>{spaceLabel(item.room, language)}</Text><Text style={s.label}>{style?.labels[language] ?? t('Needs tags', 'Нужны теги')}</Text>{position >= 0 && <Text style={typography.small}>{t('Position', 'Позиция')} {position + 1}</Text>}</View>
-        <View style={s.row}>{selectedOnly && <><Button title="↑" accessibilityLabel={t('Move photo earlier', 'Переместить фото раньше')} variant="secondary" disabled={busy || position <= 0} onPress={() => move(item.id, -1)} /><Button title="↓" accessibilityLabel={t('Move photo later', 'Переместить фото позже')} variant="secondary" disabled={busy || position === deck.length - 1} onPress={() => move(item.id, 1)} /></>}
-          <Button title={position >= 0 ? t('Remove', 'Убрать') : t('Add', 'Добавить')} variant={position >= 0 ? 'secondary' : 'primary'} disabled={busy} onPress={() => void update(position >= 0 ? deck.filter(id => id !== item.id) : [...deck, item.id])} />
-        </View>
+      return <View style={{ width: (contentWidth - (columns - 1) * 12) / columns, marginBottom: 12, gap: 4 }}>
+        <PhotoTile photo={item} language={language} title={spaceLabel(item.room, language)} subtitle={style?.labels[language] ?? t('Needs tags', 'Нужны теги')} selected={position >= 0} badge={position >= 0 ? String(position + 1) : undefined}
+          label={(position >= 0 ? t('Remove photo', 'Убрать фото') : t('Add photo', 'Добавить фото')) + ': ' + spaceLabel(item.room, language) + ', ' + (style?.labels[language] ?? t('Needs tags', 'Нужны теги')) + (position >= 0 ? ', ' + t('position', 'позиция') + ' ' + (position + 1) : '')}
+          disabled={busy} onPress={() => void update(position >= 0 ? deck.filter(id => id !== item.id) : [...deck, item.id])} />
+        {selectedOnly ? <View style={[s.row, { justifyContent: 'center' }]}><IconButton icon="up" label={t('Move photo earlier', 'Переместить фото раньше')} fallbackLabel={t('Earlier', 'Раньше')} disabled={busy || position <= 0} onPress={() => move(item.id, -1)} /><IconButton icon="down" label={t('Move photo later', 'Переместить фото позже')} fallbackLabel={t('Later', 'Позже')} disabled={busy || position === deck.length - 1} onPress={() => move(item.id, 1)} /></View> : null}
       </View>;
     }} />;
 }

@@ -26,9 +26,9 @@ Use English or Russian from the home screen. The default is Russian. The two dev
 | Step | What to do | Expected behavior |
 | --- | --- | --- |
 | 1. Home | Switch language, rotate, and open each space. | Text remains readable, cards fit the screen, room galleries show 12 photos and Whole House shows 32. |
-| 2. Ratings | Use both buttons and left/right swipes; tap rapidly; undo once. | Each photo receives one choice, undo returns to the previous photo, and style names stay hidden. |
+| 2. Ratings | Use the heart/cross buttons and left/right swipes; tap rapidly; undo with the curved arrow. | Each photo receives one choice, undo returns to the previous photo, and style names stay hidden. Android icons load from the bundled font; spoken labels remain available. |
 | 3. Resume | Make several choices, return home, close/reopen the project. | The saved session and progress can be resumed. |
-| 4. Results | Complete a room. In Whole House, open a preliminary result after 20 ratings and continue. | Results appear at the correct boundary and show only liked photos in the collection. |
+| 4. Results | Complete a room, open/close Details, and view liked photos. In Whole House, open a preliminary result after 20 ratings and continue. | Style names and liked photos appear first; Details contains feature counts. Closing Details retains the session. |
 | 5. Viewer | Open liked photos, move forward/back, and rotate while the viewer is open. | Images fit inside the viewer; navigation and close controls remain usable. |
 | 6. New client | Start a new client, cancel, then confirm. | Cancel retains the old choices. Confirmation clears the session while preserving the catalog. |
 | 7. Staff access | Open Staff / Сотрудникам, create a six-digit PIN, and save the recovery code. Lock by leaving staff mode or backgrounding the app. | Staff access requires the PIN again. The recovery code replaces a forgotten PIN and issues a new code. |

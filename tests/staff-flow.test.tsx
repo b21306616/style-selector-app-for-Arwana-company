@@ -78,3 +78,25 @@ test('gallery search retains the full selection when moving a filtered photo', a
   expect(saved.galleries.whole_house).toEqual([before[1], before[0], ...before.slice(2)]);
   expect(saved.galleries.bathroom).toEqual(app.draft!.galleries.bathroom);
 });
+
+test('photo tiles expose selection state and only remove the chosen gallery entry', async () => {
+  const before = [...app.draft!.galleries.whole_house];
+  await render(<Galleries />);
+  const tile = screen.getByRole('button', { name: 'Remove photo: Bathroom, Scandinavian, position 1' });
+  expect(tile).toBeSelected();
+  await fireEvent.press(tile);
+  const saved = jest.mocked(app.saveDraft).mock.calls[0][0] as Catalog;
+  expect(saved.galleries.whole_house).toEqual(before.slice(1));
+  expect(saved.galleries.bathroom).toEqual(app.draft!.galleries.bathroom);
+  expect(saved.photos).toEqual(app.draft!.photos);
+});
+
+test('publication coverage is optional while publication remains available', async () => {
+  await render(<Preview />);
+  expect(screen.queryByText('Scandinavian · 8')).not.toBeOnTheScreen();
+  const coverage = screen.getAllByRole('button', { name: 'Style coverage' })[0];
+  expect(coverage).toHaveProp('accessibilityState', { expanded: false });
+  await fireEvent.press(coverage);
+  expect(screen.getByText('Scandinavian · 8')).toBeOnTheScreen();
+  expect(screen.getByRole('button', { name: 'Publish these galleries' })).toBeEnabled();
+});

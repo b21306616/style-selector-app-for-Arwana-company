@@ -42,16 +42,16 @@ export function StaffGate({ children }: PropsWithChildren) {
   }
   return <Screen>
     <Header back={{ label: t('Showroom', 'Шоурум'), onPress: () => router.replace('/') }} />
-    <View style={{ width: '100%', maxWidth: 480, alignSelf: 'center', gap: 24, paddingVertical: 24 }}>
+    <View style={{ width: '100%', maxWidth: 480, alignSelf: 'center', gap: 16, paddingVertical: 12 }}>
       <Text style={typography.eyebrow}>{t('ARWANA • STAFF', 'ARWANA • СОТРУДНИКАМ')}</Text>
-      <Text style={typography.title}>{recovery ? t('Keep this code safe', 'Сохраните этот код') : setup ? t('Your catalog, protected', 'Защита вашего каталога') : recovering ? t('Recover access', 'Восстановление доступа') : t('Welcome back', 'С возвращением')}</Text>
+      <Text style={typography.heading}>{recovery ? t('Keep this code safe', 'Сохраните этот код') : setup ? t('Create staff PIN', 'Создайте PIN сотрудника') : recovering ? t('Recover access', 'Восстановление доступа') : t('Staff access', 'Вход для сотрудников')}</Text>
       {auth.error ? <ErrorBanner message={authMessage(auth.error, language === 'ru')} onRetry={() => void auth.refresh()} /> : auth.configured === null ? <ActivityIndicator color={colors.green} /> : recovery ? <>
         <Text style={typography.body}>{t('Write down this recovery code and keep it somewhere safe. It can reset your PIN without deleting your catalog. It will not be shown again.', 'Запишите код восстановления и сохраните его в надёжном месте. Он позволяет сменить PIN без удаления каталога. Повторно код не показывается.')}</Text>
         <View style={uiStyles.card}><Text selectable style={[typography.subheading, { letterSpacing: 2 }]}>{recovery}</Text></View>
         <Text style={typography.small}>{t('If both your PIN and this code are lost, there is no in-app recovery.', 'Если потерять и PIN, и этот код, восстановить доступ в приложении будет невозможно.')}</Text>
         <Button title={t('I saved the code — sign in', 'Код сохранён — войти')} onPress={() => setRecovery(null)} />
       </> : <>
-        <Text style={typography.body}>{setup ? t('Create a six-digit staff PIN. Your photos and edits stay on this device; removing app data can remove the catalog.', 'Создайте шестизначный PIN сотрудника. Фотографии и изменения хранятся на этом устройстве; очистка данных приложения может удалить каталог.') : t('Enter your staff PIN to manage photographs, galleries, and styles.', 'Введите PIN сотрудника для управления фотографиями, подборками и стилями.')}</Text>
+        <Text style={typography.body}>{setup ? t('Create a six-digit staff PIN. Your photos and edits stay on this device; removing app data can remove the catalog.', 'Создайте шестизначный PIN сотрудника. Фотографии и изменения хранятся на этом устройстве; очистка данных приложения может удалить каталог.') : t('Enter your six-digit PIN.', 'Введите PIN из шести цифр.')}</Text>
         {recovering && <TextField label={t('Recovery code', 'Код восстановления')} value={code} onChangeText={setCode} autoCapitalize="characters" autoCorrect={false} />}
         <TextField label={setup || recovering ? t('New six-digit PIN', 'Новый PIN из шести цифр') : 'PIN'} value={pin} onChangeText={value => setPin(value.replace(/\D/g, ''))} keyboardType="number-pad" secureTextEntry maxLength={6} autoComplete="off" />
         {(setup || recovering) && <TextField label={t('Confirm PIN', 'Повторите PIN')} value={confirmation} onChangeText={value => setConfirmation(value.replace(/\D/g, ''))} keyboardType="number-pad" secureTextEntry maxLength={6} autoComplete="off" />}

@@ -20,9 +20,9 @@ Expo Go needs the development bundle and assets from Metro. This is different fr
 
 ## Included
 
-- Warm ivory/green design, responsive phone/tablet layouts, both orientations, safe areas, enlarged text, accessible buttons, and reduced-motion swipe feedback.
+- Warm ivory/green photo galleries throughout client and staff screens, responsive phone/tablet layouts, both orientations, safe areas, enlarged text, accessible icon controls, and reduced-motion swipe feedback.
 - Russian and English, with a remembered language preference.
-- Like/dislike swipes and buttons, undo, resume after closing, preliminary results after 20 choices, and a full-image liked-photo viewer.
+- Heart/cross rating controls and swipes, undo, resume after closing, preliminary results after 20 choices, an optional Details breakdown, and a full-image liked-photo viewer.
 - One retained client session. Starting a new client clears previous choices after confirmation.
 - A sample catalog with 48 distinct AI-generated interiors: 12 per room and 32 in Whole House. Full images and thumbnails total 14.09 MiB. Gallery sizes remain editable.
 - Staff photo imports, bilingual vocabulary editing, gallery selection/order, draft validation, atomic publication, and offline PIN recovery.

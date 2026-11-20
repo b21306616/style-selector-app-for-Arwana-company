@@ -7,6 +7,7 @@ import { AppProvider, useApp } from '../state/AppProvider';
 import { StaffAuthProvider } from '../features/staff/auth-context';
 import { Button, colors, typography } from '../components/ui';
 import { messageForError } from '../domain/errors';
+import { IconProvider } from '../components/Icon';
 
 function AppContent() {
   const { ready, error, refresh, language } = useApp();
@@ -20,10 +21,10 @@ function AppContent() {
 export default function RootLayout() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <SafeAreaProvider><AppProvider><StaffAuthProvider>
+      <SafeAreaProvider><IconProvider><AppProvider><StaffAuthProvider>
         <StatusBar style="dark" />
         <AppContent />
-      </StaffAuthProvider></AppProvider></SafeAreaProvider>
+      </StaffAuthProvider></AppProvider></IconProvider></SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }

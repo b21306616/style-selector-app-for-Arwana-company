@@ -18,9 +18,10 @@ jest.mock('../src/components/PhotoImage', () => {
 jest.mock('../src/components/SwipePhoto', () => {
   const React = require('react');
   const { Pressable, Text, View } = require('react-native');
-  return { SwipePhoto: ({ onReady, label }: { onReady: () => void; label: string }) => React.createElement(View, null,
+  return { SwipePhoto: ({ onReady, onFailure, label }: { onReady: () => void; onFailure: () => void; label: string }) => React.createElement(View, null,
     React.createElement(Text, null, label),
     React.createElement(Pressable, { accessibilityRole: 'button', accessibilityLabel: 'Image finished loading', onPress: onReady }, React.createElement(Text, null, 'Image finished loading')),
+    React.createElement(Pressable, { accessibilityRole: 'button', accessibilityLabel: 'Image failed', onPress: onFailure }, React.createElement(Text, null, 'Image failed')),
   ) };
 });
 
@@ -96,4 +97,51 @@ test('Russian home uses real gallery counts and asks before replacing a client s
   await fireEvent.press(screen.getByRole('button', { name: 'Начать новый сеанс' }));
   expect(app.startSession).toHaveBeenCalledWith('bathroom');
   expect(router.push).toHaveBeenCalledWith('/gallery');
+});
+
+test('result keeps features behind Details and preserves the selection when closing it', async () => {
+  app.session = sessionWith(32, true);
+  await render(<ResultScreen />);
+  expect(screen.getAllByRole('button', { name: /Open liked photo/ }).length).toBeGreaterThan(0);
+  expect(screen.queryByText('Warm neutrals')).not.toBeOnTheScreen();
+  await fireEvent.press(screen.getByRole('button', { name: 'Details' }));
+  expect(screen.getByText('Warm neutrals')).toBeOnTheScreen();
+  await fireEvent.press(screen.getByRole('button', { name: 'Close details' }));
+  expect(screen.queryByText('Warm neutrals')).not.toBeOnTheScreen();
+  expect(app.clearSession).not.toHaveBeenCalled();
+  expect(app.undo).not.toHaveBeenCalled();
+});
+
+test('liked-photo viewer uses accessible icon navigation with correct boundaries', async () => {
+  app.session = { ...sessionWith(32, true), ratings: sessionWith(32, true).ratings.map((rating, index) => ({ ...rating, choice: index < 2 ? 'like' : 'dislike' })) };
+  await render(<ResultScreen />);
+  await fireEvent.press(screen.getAllByRole('button', { name: /Open liked photo/ })[0]);
+  expect(screen.getByRole('button', { name: 'Previous' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Next' })).toBeEnabled();
+  await fireEvent.press(screen.getByRole('button', { name: 'Next' }));
+  expect(screen.getByRole('button', { name: 'Next' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Previous' })).toBeEnabled();
+  await fireEvent.press(screen.getByRole('button', { name: 'Close' }));
+  expect(screen.queryByRole('button', { name: 'Next' })).not.toBeOnTheScreen();
+});
+
+test('failed photos cannot be rated until a successful reload', async () => {
+  await render(<GalleryScreen />);
+  await fireEvent.press(screen.getByRole('button', { name: 'Image failed' }));
+  expect(screen.getByRole('button', { name: 'Love it' })).toBeDisabled();
+  expect(screen.getByRole('button', { name: 'Not for me' })).toBeDisabled();
+  await fireEvent.press(screen.getByRole('button', { name: 'Reload photo' }));
+  expect(screen.getByRole('button', { name: 'Love it' })).toBeDisabled();
+  await fireEvent.press(screen.getByRole('button', { name: 'Image finished loading' }));
+  expect(screen.getByRole('button', { name: 'Love it' })).toBeEnabled();
+  expect(app.rate).not.toHaveBeenCalled();
+});
+
+test('no liked photos produces an honest empty result and no invented style', async () => {
+  app.session = { ...sessionWith(32, true), ratings: sessionWith(32, true).ratings.map(rating => ({ ...rating, choice: 'dislike' })) };
+  await render(<ResultScreen />);
+  expect(screen.getByText('No clear style yet')).toBeOnTheScreen();
+  expect(screen.queryByRole('button', { name: /Open liked photo/ })).not.toBeOnTheScreen();
+  await fireEvent.press(screen.getByRole('button', { name: 'Details' }));
+  expect(screen.getByText('No shared features yet.')).toBeOnTheScreen();
 });

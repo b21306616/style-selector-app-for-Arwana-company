@@ -18,6 +18,8 @@ export const typography = StyleSheet.create({
 export function useLayout() {
   const { width, height, fontScale } = useWindowDimensions();
   const insets = useContext(SafeAreaInsetsContext);
-  const padding = width >= 600 ? 32 : 20;
-  return { width, height, fontScale, padding, contentWidth: Math.min(width - (insets?.left ?? 0) - (insets?.right ?? 0) - padding * 2, 1200), tablet: width >= 600, wide: width >= 900 && fontScale < 1.5 };
+  const padding = width >= 600 ? 24 : 12;
+  const contentWidth = Math.min(width - (insets?.left ?? 0) - (insets?.right ?? 0) - padding * 2, 1200);
+  const columns = fontScale >= 1.5 || contentWidth < 300 ? 1 : width >= 600 ? Math.min(4, Math.max(2, Math.floor(contentWidth / 220))) : 2;
+  return { width, height, fontScale, padding, contentWidth, columns, tablet: width >= 600, wide: width >= 900 && fontScale < 1.5 };
 }

@@ -3,7 +3,7 @@ import { useCallback } from 'react';
 import { StaffGate } from '../../features/staff/StaffGate';
 import { useStaffAuth } from '../../features/staff/auth-context';
 
-export const unstable_settings = { initialRouteName: 'dashboard' };
+export const unstable_settings = { anchor: 'dashboard' };
 
 export default function StaffLayout() {
   const { lock } = useStaffAuth();

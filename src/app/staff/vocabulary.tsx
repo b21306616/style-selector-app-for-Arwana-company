@@ -10,6 +10,7 @@ import { Term, TermKind } from '../../domain/types';
 import { termIsReferenced } from '../../domain/catalog';
 import { messageForError } from '../../domain/errors';
 import { StaffList, kindLabel, staffStyles as s } from '../../features/staff/shared';
+import { TermLabelFields } from '../../features/staff/EntryFields';
 
 export default function Vocabulary() {
   const { draft, language, saveDraft, busy } = useApp();
@@ -53,8 +54,7 @@ export default function Vocabulary() {
     <AppModal visible={!!editing} animationType="slide" onRequestClose={close}>{editing && <Screen>
       <Header back={{ label: t('Sözlük', 'Словарь'), onPress: close }} />
       <Text style={typography.heading}>{original ? t('Termini redaktirlemek', 'Редактировать термин') : t('Täze termin', 'Новый термин')}</Text><Chip label={kindLabel(editing.kind, language)} />
-      <TextField label="Русское название" value={editing.labels.ru} onChangeText={value => setEditing({ ...editing, labels: { ...editing.labels, ru: value } })} maxLength={100} />
-      <TextField label="Türkmençe ady" value={editing.labels.tk} onChangeText={value => setEditing({ ...editing, labels: { ...editing.labels, tk: value } })} maxLength={100} />
+      <TermLabelFields labels={editing.labels} onChange={labels => setEditing({ ...editing, labels })} disabled={busy} />
       {error && <ErrorBanner message={error} />}
       <Button title={t('Termini ýatda sakla', 'Сохранить термин')} onPress={() => void save()} loading={busy} disabled={!editing.labels.tk.trim() || !editing.labels.ru.trim()} />
       {referenced && <Text style={typography.small}>{t('Bu termin suratlarda ulanylýar. Öçürmezden ozal ony suratlarda çalyşyň.', 'Термин используется фотографиями библиотеки. Замените его у этих фотографий перед удалением.')}</Text>}

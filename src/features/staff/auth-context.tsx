@@ -12,6 +12,7 @@ interface StaffAuth {
   setup: (pin: string) => Promise<string>;
   recover: (code: string, pin: string) => Promise<string>;
   lock: () => void;
+  isUnlocked: () => boolean;
 }
 const Context = createContext<StaffAuth | null>(null);
 export function StaffAuthProvider({ children }: PropsWithChildren) {
@@ -21,7 +22,9 @@ export function StaffAuthProvider({ children }: PropsWithChildren) {
   const [error, setError] = useState<string | null>(null);
   const epoch = useRef(0);
   const pending = useRef(false);
-  const lock = useCallback(() => { epoch.current += 1; setUnlocked(false); }, []);
+  const unlockedRef = useRef(false);
+  const isUnlocked = useCallback(() => unlockedRef.current, []);
+  const lock = useCallback(() => { epoch.current += 1; unlockedRef.current = false; setUnlocked(false); }, []);
   const refresh = useCallback(async () => {
     try { setConfigured((await staffStatus()).configured); setError(null); }
     catch { setError('AUTH_STORAGE'); }
@@ -44,11 +47,11 @@ export function StaffAuthProvider({ children }: PropsWithChildren) {
     try {
       const result = await work();
       setConfigured(true);
-      if (allowUnlock && epoch.current === started) setUnlocked(true);
+      if (allowUnlock && epoch.current === started) { unlockedRef.current = true; setUnlocked(true); }
       return result;
     } finally { pending.current = false; setBusy(false); }
   }
-  return <Context.Provider value={{ configured, unlocked, busy, error, refresh, lock,
+  return <Context.Provider value={{ configured, unlocked, busy, error, refresh, lock, isUnlocked,
     unlock: pin => action(() => unlockStaff(pin), true),
     setup: pin => action(() => setupStaff(pin), false),
     recover: (code, pin) => action(() => recoverStaff(code, pin), false),

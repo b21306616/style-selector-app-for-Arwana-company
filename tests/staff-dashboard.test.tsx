@@ -8,6 +8,8 @@ import { AppContextValue, useApp } from '../src/state/AppProvider';
 jest.mock('expo-router', () => ({ router: { push: jest.fn(), replace: jest.fn() } }));
 jest.mock('../src/state/AppProvider', () => ({ useApp: jest.fn() }));
 jest.mock('../src/features/staff/auth-context', () => ({ useStaffAuth: () => ({ lock: jest.fn() }) }));
+jest.mock('../src/features/staff/workspace-context', () => ({ useStaffWorkspace: () => ({ busy: false }) }));
+jest.mock('../src/features/staff/DashboardWorkbench', () => ({ DashboardWorkbench: () => null }));
 jest.mock('../src/components/PhotoImage', () => {
   const React = require('react');
   const { View } = require('react-native');

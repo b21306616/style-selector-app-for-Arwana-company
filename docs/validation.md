@@ -2,7 +2,24 @@
 
 Implementation checks were run on Windows with Node 26.13.1, Expo SDK 58, and React Native 0.88.1 on 17 November 2026. Android and iOS are the target platforms. This record distinguishes automated checks, user-confirmed device checks, and the acceptance work still pending.
 
-## Automated checks
+## Staff dashboard and Excel update — 22 November 2026
+
+The dashboard now supports direct photo/vocabulary entry, a bilingual Excel template, merge/replace import review, and paired workbook/photo-ZIP exports. The transfer contract is tested with 500 photos. Automated service tests use mocked native file handles and pickers; their bounded-read assertions do not measure physical-device peak memory.
+
+| Check | Result |
+| --- | --- |
+| `npm run typecheck` and `npm run lint` | Passed |
+| `npm test -- --watch=false` | 15 suites, 95 tests passed |
+| `npx expo install --check` | Dependencies are up to date |
+| Android JavaScript/Hermes export | Passed; 123 assets |
+| iOS JavaScript/Hermes export | Passed; 120 assets |
+| `npm run validate:catalog -- --exports` | All 48 full images and 48 thumbnails verified in both exports |
+
+New tests cover complete workbook/image round trips, bilingual labels, stable IDs and ordering, metadata-only reimport, merge/replace semantics, invalid formulas and references, duplicate filenames, CRC/path/expansion checks, streamed image export, cancellation and low-storage cleanup, stale review rejection, draft-only writes, and form/picker state across PIN locking. Narrow-screen Turkmen controls are exercised with enlarged mocked text dimensions.
+
+Android and iOS bundle validation is not an APK/IPA installation or a device interaction test. The new native file-picker/share-sheet behavior, actual tablet/phone layouts, keyboard behavior, and large-transfer memory usage still require the device walkthrough. Existing device confirmations from 17 November apply only to the earlier app behavior. No app was published or installed by this change.
+
+## Original release automated checks
 
 | Check | Result |
 | --- | --- |

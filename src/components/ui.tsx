@@ -28,8 +28,8 @@ export function Button({ title, onPress, variant = 'primary', disabled, loading,
 export function TextField({ label, style, ...props }: TextInputProps & { label: string }) {
   return <View style={styles.field}><Text style={styles.label}>{label}</Text><TextInput accessibilityLabel={label} placeholderTextColor={colors.muted} style={[styles.input, props.multiline && { minHeight: 96, textAlignVertical: 'top' }, style]} {...props} /></View>;
 }
-export function Chip({ label, selected = false, onPress, style }: { label: string; selected?: boolean; onPress?: () => void; style?: StyleProp<ViewStyle> }) {
-  return onPress ? <Pressable accessibilityRole="button" accessibilityState={{ selected }} onPress={onPress} style={({ pressed }) => [styles.chip, styles.chipTouch, selected && styles.chipSelected, pressed && styles.pressed, style]}><Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text></Pressable>
+export function Chip({ label, selected = false, onPress, style, disabled = false }: { label: string; selected?: boolean; onPress?: () => void; style?: StyleProp<ViewStyle>; disabled?: boolean }) {
+  return onPress ? <Pressable accessibilityRole="button" accessibilityState={{ selected, disabled }} disabled={disabled} onPress={onPress} style={({ pressed }) => [styles.chip, styles.chipTouch, selected && styles.chipSelected, disabled && styles.disabled, pressed && styles.pressed, style]}><Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text></Pressable>
     : <View style={[styles.chip, selected && styles.chipSelected, style]}><Text style={[styles.chipText, selected && styles.chipTextSelected]}>{label}</Text></View>;
 }
 export function Header({ title = 'ARWANA', subtitle, back, right }: { title?: string; subtitle?: string; back?: { label: string; onPress: () => void }; right?: ReactNode }) {

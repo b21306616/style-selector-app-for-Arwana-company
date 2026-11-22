@@ -19,7 +19,12 @@ test('backgrounding locks an unlocked staff workspace', async () => {
   const { result } = await renderHook(() => useStaffAuth(), { wrapper: StaffAuthProvider });
   await act(async () => { await result.current.unlock('123456'); });
   expect(result.current.unlocked).toBe(true);
-  await act(async () => { background('background'); });
+  expect(result.current.isUnlocked()).toBe(true);
+  await act(async () => {
+    background('background');
+    // Async imports must see the lock immediately, before React rerenders the gate.
+    expect(result.current.isUnlocked()).toBe(false);
+  });
   expect(result.current.unlocked).toBe(false);
 });
 

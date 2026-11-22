@@ -20,6 +20,18 @@ The bundled-image manifest contains static `require` references so native export
 
 Durable image names are relative to the app-private document directory, avoiding installation-specific absolute paths. Local names are validated before resolution. Cleanup only examines the owned image directory, preserves all referenced files, and gives new imports a one-hour grace period. Thumbnail lists are virtualized; full photographs are rendered with downscaling and without whole-catalog memory caching.
 
+## Dashboard authoring and transfers
+
+The staff layout owns a workspace provider above the PIN gate. It retains unsaved entry fields, staged image ownership, import review, and export file references while the gate unmounts screens on background lock. Its operation guard prevents duplicate work. A synchronous auth query blocks saving after a background event, even before React rerenders. Route removal is guarded while work is pending or input is unsaved. Leaving the layout aborts preparation and releases files that were never committed; cleanup waits for an in-flight save to settle.
+
+The workbook contract is version 1, independent of the SQLite schema. `Metadata`, `Terms`, `Photos`, and `Galleries` carry catalog data; `Guide` is instructions only. Photo paths are portable filenames and never expose native image references. Workbook decoding and merge/replace review are pure services. Review distinguishes invalid data from incomplete editorial metadata. Commit compares the reviewed draft fingerprint inside the functional `saveDraft` updater. Replacement confirmation captures its reviewed candidate so later edits cannot be silently overwritten.
+
+Native adapters use SDK 58 DocumentPicker, Sharing, Asset, and the current File/FileHandle APIs. ZIP input has bounded directory preflight, path/size checks, actual output-size checks, and CRC verification. It streams into an owned cache directory; photos are then decoded sequentially using the existing bounded image pipeline and fresh UUID file names. Replacements never overwrite images referenced by published revisions or active sessions. Failed import persistence releases prepared images. Export writes a workbook and streams stored JPEGs into a companion ZIP from one snapshot. No whole photo archive is held in JavaScript memory. Generated outputs are retained for repeat sharing until leaving staff mode or generating replacements.
+
+Transfer limits are 500 photos, 5,000 terms, 10 MiB XLSX input, 50 MiB expanded workbook contents, 50 MiB per source image, and 1 GiB total source images. Password protection, embedded spreadsheet images, formulas in data columns, encrypted archives, and ZIP64 are unsupported. There is no schema migration or automatic synchronization.
+
+SheetJS is pinned to its official 0.20.3 tarball, with integrity recorded in the lockfile, and initialized on the first spreadsheet operation. Install through Expo. On machines where npm blocks direct URL packages, `npx.cmd expo install -- --allow-remote=root` permits the URL dependencies explicitly listed in this project's manifest for that command without changing global npm settings.
+
 ## Staff access
 
 Staff credentials use random salts and credential hashes held in native SecureStore. Raw PINs and recovery codes are not persisted. Recovery codes contain 128 random bits and rotate after use. Failed attempts and cooldown timestamps persist across restarts. Staff access closes on backgrounding and on leaving the staff navigator. An unlock finishing after a background event cannot reopen the workspace.

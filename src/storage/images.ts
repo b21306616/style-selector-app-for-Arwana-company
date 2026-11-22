@@ -18,28 +18,24 @@ export function photoSource(photo: Photo, thumbnail = false): number | { uri: st
   return safeName(name) ? { uri: new File(directory(), name).uri } : undefined;
 }
 
+export interface ImageInput { uri: string; width?: number; height?: number; fileSize?: number }
+
 /** Imports are all-or-nothing. The caller saves returned metadata into the draft. */
-export async function importPhotos(room: Room = 'bathroom', onProgress?: (done: number, total: number) => void): Promise<Photo[]> {
+async function processPhotoSelection(select: () => Promise<readonly ImageInput[]>, room: Room, onProgress?: (done: number, total: number) => void, signal?: AbortSignal): Promise<Photo[]> {
   if (importing) throw new Error('IMPORT_BUSY');
   importing = true;
   const created: File[] = [];
   const temporary: File[] = [];
   try {
-    const selection = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsMultipleSelection: true,
-      selectionLimit: 20,
-      quality: 1,
-      exif: false,
-      base64: false,
-    });
-    if (selection.canceled) return [];
-    if (selection.assets.length > 20) throw new Error('IMPORT_LIMIT');
+    const assets = await select();
+    if (!assets.length) return [];
     directory().create({ idempotent: true, intermediates: true });
     const photos: Photo[] = [];
-    for (const asset of selection.assets) {
-      if (!Number.isFinite(asset.width) || !Number.isFinite(asset.height) || asset.width <= 0 || asset.height <= 0 ||
-          asset.width * asset.height > 80_000_000 || (asset.fileSize ?? 0) > 50 * 1024 * 1024) {
+    for (const asset of assets) {
+      if (signal?.aborted) throw new AppError('TRANSFER_CANCELED');
+      if ((asset.width !== undefined && (!Number.isFinite(asset.width) || asset.width <= 0)) ||
+          (asset.height !== undefined && (!Number.isFinite(asset.height) || asset.height <= 0)) ||
+          (asset.width ?? 1) * (asset.height ?? 1) > 80_000_000 || (asset.fileSize ?? 0) > 50 * 1024 * 1024) {
         throw new Error('IMAGE_TOO_LARGE');
       }
       if (Paths.availableDiskSpace < 30 * 1024 * 1024) throw new Error('STORAGE_FULL');
@@ -49,6 +45,7 @@ export async function importPhotos(room: Room = 'bathroom', onProgress?: (done: 
       try {
         rendered = await context.renderAsync();
         const image = await rendered.saveAsync({ format: SaveFormat.JPEG, compress: 0.84 });
+        if (!Number.isFinite(image.width) || !Number.isFinite(image.height) || image.width <= 0 || image.height <= 0) throw new AppError('IMPORT_FAILED');
         const source = new File(image.uri);
         temporary.push(source);
         const target = new File(directory(), `${id}.jpg`);
@@ -72,7 +69,8 @@ export async function importPhotos(room: Room = 'bathroom', onProgress?: (done: 
           });
         } finally { thumbImage?.release(); thumbContext.release(); }
       } finally { rendered?.release(); context.release(); }
-      onProgress?.(photos.length, selection.assets.length);
+      onProgress?.(photos.length, assets.length);
+      if (signal?.aborted) throw new AppError('TRANSFER_CANCELED');
     }
     return photos;
   } catch (error) {
@@ -82,6 +80,36 @@ export async function importPhotos(room: Room = 'bathroom', onProgress?: (done: 
   } finally {
     for (const file of temporary) { try { if (file.exists) file.delete(); } catch { /* OS cache can be reclaimed. */ } }
     importing = false;
+  }
+}
+
+export async function importPhotos(room: Room = 'bathroom', onProgress?: (done: number, total: number) => void): Promise<Photo[]> {
+  return processPhotoSelection(async () => {
+    const selection = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: true, selectionLimit: 20, quality: 1, exif: false, base64: false });
+    if (selection.canceled) return [];
+    if (selection.assets.length > 20) throw new AppError('IMPORT_LIMIT');
+    return selection.assets;
+  }, room, onProgress);
+}
+
+export async function pickDraftPhoto(room: Room): Promise<Photo | null> {
+  const photos = await processPhotoSelection(async () => {
+    const selection = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: false, quality: 1, exif: false, base64: false });
+    return selection.canceled ? [] : selection.assets.slice(0, 1);
+  }, room);
+  return photos[0] ?? null;
+}
+
+export function preparePhotoFiles(assets: ImageInput[], onProgress?: (done: number, total: number) => void, signal?: AbortSignal): Promise<Photo[]> {
+  return processPhotoSelection(() => Promise.resolve(assets), 'bathroom', onProgress, signal);
+}
+
+/** Only call for newly prepared photos that have never been committed to a catalog. */
+export function discardPreparedPhotos(photos: Iterable<Photo>) {
+  for (const photo of photos) if (photo.image.kind === 'local') {
+    for (const name of [photo.image.file, photo.image.thumbnail]) if (safeName(name)) {
+      try { const file = new File(directory(), name); if (file.exists) file.delete(); } catch { /* Startup cleanup retries. */ }
+    }
   }
 }
 

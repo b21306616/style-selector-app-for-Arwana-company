@@ -2,6 +2,18 @@
 
 This walkthrough uses the existing Expo Go application to review Arwana without creating an APK, AAB, or IPA. Test both platforms: the native keyboard, photo picker, orientation, and storage behavior can differ.
 
+## Staff dashboard and Excel acceptance
+
+Run these checks in Russian and Turkmen on Android and iOS, including narrow phones, tablets, both orientations, and enlarged text. A development build created before adding DocumentPicker/Sharing must be rebuilt to include the new native modules; an SDK 58-compatible Expo Go client includes them.
+
+1. Open **Staff → Add content**. Choose a photograph, select a room, create a bilingual style inline, and select tags. Open the keyboard and verify every field and Save remain reachable. Save to the draft and confirm the client catalog does not change before publication.
+2. Prepare an unsaved photo, open a native picker, then background the app. Re-enter the PIN and verify the form and returned selection remain available. Try leaving staff mode and cancel the discard prompt. Clear the form explicitly and verify the saved draft is unchanged.
+3. Generate and save the Excel template. Export the current draft and save **both** the workbook and photo ZIP. Open the workbook in Excel, change a bilingual term, and reorder a gallery. Confirm repeat sharing uses the same prepared files until another export is generated.
+4. On another device, import the workbook and ZIP. Inspect row errors and the merge/replace summary. Try merge, then replace with confirmation. Verify photo availability after restarting, original gallery order, sample markers, and independent published/active-session content. Use Review & publish to activate the result for new customers.
+5. Cancel a picker and a running transfer. Try missing photographs, duplicate filenames, corrupt ZIP data, unavailable cloud files while offline, and low device storage. Each failure should preserve the saved draft. Run a 500-photo transfer on a representative older phone and inspect progress, cancellation, and peak/retained memory.
+
+These native checks remain manual acceptance work; JavaScript bundle export and mocked tests do not establish device behavior.
+
 ## Open the preview
 
 1. Install or update Expo Go on each device using the [official environment setup instructions](https://docs.expo.dev/get-started/set-up-your-environment/). Use a client compatible with this project's Expo SDK 58.

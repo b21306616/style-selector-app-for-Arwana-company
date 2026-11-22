@@ -9,7 +9,8 @@ import { useApp } from '../../state/AppProvider';
 import { Photo, ROOMS, Room, SPACES } from '../../domain/types';
 import { importPhotos } from '../../storage/images';
 import { messageForError } from '../../domain/errors';
-import { StaffList, kindLabel, staffStyles as s } from '../../features/staff/shared';
+import { StaffList, staffStyles as s } from '../../features/staff/shared';
+import { PhotoMetadataFields } from '../../features/staff/EntryFields';
 
 export default function StaffPhotos() {
   const { draft, language, saveDraft, busy } = useApp();
@@ -82,12 +83,7 @@ export default function StaffPhotos() {
         <View style={{ flexDirection: wide ? 'row' : 'column', gap: 20, alignItems: 'flex-start' }}>
         <PhotoImage key={editing.id} photo={editing} language={language} fit="contain" style={{ width: wide ? '46%' : '100%', height: Math.min(tablet ? 400 : 300, contentWidth * editing.height / editing.width), borderRadius: 18 }} />
         <View style={{ flex: 1, width: wide ? undefined : '100%', gap: 16 }}>
-        <View style={s.section}><Text style={s.label}>{t('Otag', 'Комната')}</Text><View style={s.row}>{ROOMS.map(value => <Chip key={value} label={spaceLabel(value, language)} selected={editing.room === value} onPress={() => setEditing({ ...editing, room: value })} />)}</View></View>
-        <View style={s.section}><Text style={s.label}>{kindLabel('style', language)}</Text><View style={s.row}>{draft.terms.filter(term => term.kind === 'style').map(term => <Chip key={term.id} label={term.labels[language]} selected={editing.styleId === term.id} onPress={() => setEditing({ ...editing, styleId: term.id })} />)}</View></View>
-        {(['palette', 'material', 'detail'] as const).map(kind => {
-          const field = kind === 'palette' ? 'paletteIds' : kind === 'material' ? 'materialIds' : 'detailIds';
-          return <View key={kind} style={s.section}><Text style={s.label}>{kindLabel(kind, language)}</Text><View style={s.row}>{draft.terms.filter(term => term.kind === kind).map(term => <Chip key={term.id} label={term.labels[language]} selected={editing[field].includes(term.id)} onPress={() => setEditing({ ...editing, [field]: editing[field].includes(term.id) ? editing[field].filter(id => id !== term.id) : [...editing[field], term.id] })} />)}</View></View>;
-        })}
+        <PhotoMetadataFields value={editing} terms={draft.terms} language={language} onChange={value => setEditing({ ...editing, ...value })} disabled={busy} />
         <Text style={typography.small}>{t('Talap edilýär: bir stil we her kategoriýadan azyndan bir teg. Otagy üýtgetmek bu suraty öňki otag toplumyndan aýyrýar.', 'Нужен один стиль и хотя бы один тег каждой категории. При смене комнаты фото удалится из прежней комнатной подборки.')}</Text>
         {error && <ErrorBanner message={error} />}
         <Button title={t('Suraty ýatda sakla', 'Сохранить фотографию')} onPress={() => void save()} loading={busy} />

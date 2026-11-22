@@ -8,6 +8,16 @@ export class AppError extends Error {
 }
 
 const messages: Record<string, Record<Language, string>> = {
+  DUPLICATE_TERM: { tk: 'Bu kategoriýada şeýle atly termin eýýäm bar.', ru: 'Термин с таким названием уже есть в этой категории.' },
+  INVALID_WORKBOOK: { tk: 'Excel faýly okalmady. Programmanyň .xlsx şablonyny ulanyň.', ru: 'Не удалось прочитать Excel. Используйте шаблон .xlsx из приложения.' },
+  INVALID_ARCHIVE: { tk: 'ZIP nädogry, zaýalanan ýa-da goldanylmaýar.', ru: 'ZIP повреждён, содержит небезопасные пути или не поддерживается.' },
+  TRANSFER_LIMIT: { tk: 'Çäk: 500 surat, XLSX 10 MiB, her surat 50 MiB, suratlar jemi 1 GiB.', ru: 'Лимиты: 500 фото, XLSX 10 МиБ, фото 50 МиБ каждое и 1 ГиБ всего.' },
+  TRANSFER_CANCELED: { tk: 'Amal ýatyryldy. Garalama üýtgemedi.', ru: 'Операция отменена. Черновик не изменён.' },
+  TRANSFER_FAILED: { tk: 'Faýllary taýýarlap bolmady. Faýllary we boş ýeri barlap gaýtadan synanyşyň.', ru: 'Не удалось подготовить файлы. Проверьте файлы и свободное место, затем повторите.' },
+  DUPLICATE_FILENAME: { tk: 'Birmeňzeş atly suratlar bar. Faýllaryň atlaryny tapawutlandyryň.', ru: 'Есть изображения с одинаковыми именами. Переименуйте их и повторите выбор.' },
+  STALE_DRAFT: { tk: 'Garalama üýtgedi. Täzelenen syny barlap, ýene tassyklaň.', ru: 'Черновик изменился. Проверьте обновлённый обзор и подтвердите снова.' },
+  STAFF_LOCKED: { tk: 'Dowam etmek üçin işgär PIN koduny giriziň.', ru: 'Для продолжения войдите с PIN сотрудника.' },
+  SHARING_UNAVAILABLE: { tk: 'Bu enjamda faýl paýlaşmak elýeterli däl.', ru: 'На этом устройстве недоступно сохранение через меню «Поделиться».' },
   BUSY: { tk: 'Üýtgeşme entek ýatda saklanylýar. Birazdan gaýtadan synanyşyň.', ru: 'Изменение ещё сохраняется. Повторите попытку через мгновение.' },
   EMPTY_GALLERY: { tk: 'Bu toplumda entek surat ýok. Başga otagy saýlaň.', ru: 'В этой галерее пока нет фотографий. Выберите другое пространство.' },
   NO_SESSION: { tk: 'Ilki saýlamagy başlaň.', ru: 'Сначала начните подборку.' },

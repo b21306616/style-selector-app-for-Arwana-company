@@ -1,4 +1,3 @@
-import { forwardRef, useImperativeHandle } from 'react';
 import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
 import Animated, {
@@ -20,7 +19,6 @@ export interface SwipePhotoProps {
   photo: Photo;
   nextPhoto?: Photo;
   language: Language;
-  height: number;
   enabled: boolean;
   onChoice: (choice: Choice) => void;
   onReady: () => void;
@@ -28,14 +26,7 @@ export interface SwipePhotoProps {
   label: string;
 }
 
-export interface SwipePhotoHandle {
-  swipe: (choice: Choice) => boolean;
-}
-
-export const SwipePhoto = forwardRef<SwipePhotoHandle, SwipePhotoProps>(function SwipePhoto(
-  { photo, nextPhoto, language, height, enabled, onChoice, onReady, onFailure, label },
-  ref
-) {
+export function SwipePhoto({ photo, nextPhoto, language, enabled, onChoice, onReady, onFailure, label }: SwipePhotoProps) {
   const { width: windowWidth } = useWindowDimensions();
   const exitDistance = Math.max(windowWidth * 1.3, 520);
   const x = useSharedValue(0);
@@ -107,35 +98,6 @@ export const SwipePhoto = forwardRef<SwipePhotoHandle, SwipePhotoProps>(function
     },
   });
 
-  useImperativeHandle(
-    ref,
-    () => ({
-      swipe: (choice: Choice) => {
-        if (isCommitted.value || !enabled) return false;
-        isCommitted.value = true;
-        const targetX = choice === 'like' ? exitDistance : -exitDistance;
-        if (reduceMotion) {
-          x.value = targetX;
-          scheduleOnRN(onChoice, choice);
-        } else {
-          y.value = withTiming(0, { duration: 240, easing: Easing.out(Easing.quad) });
-          x.value = withTiming(
-            targetX,
-            { duration: 240, easing: Easing.out(Easing.quad) },
-            (finished) => {
-              'worklet';
-              if (finished) {
-                scheduleOnRN(onChoice, choice);
-              }
-            }
-          );
-        }
-        return true;
-      },
-    }),
-    [enabled, exitDistance, isCommitted, onChoice, reduceMotion, x, y]
-  );
-
   const cardAnimatedStyle = useAnimatedStyle(() => {
     const rotateDeg = reduceMotion ? 0 : x.value / 25;
     const opacity = interpolate(
@@ -193,7 +155,7 @@ export const SwipePhoto = forwardRef<SwipePhotoHandle, SwipePhotoProps>(function
   });
 
   return (
-    <View style={[styles.stage, { height }]}>
+    <View style={styles.stage}>
       <Animated.View style={[styles.backCard, backCardAnimatedStyle]}>
         {nextPhoto ? (
           <PhotoImage
@@ -228,16 +190,16 @@ export const SwipePhoto = forwardRef<SwipePhotoHandle, SwipePhotoProps>(function
       </GestureDetector>
     </View>
   );
-});
+}
 
 const styles = StyleSheet.create({
-  stage: { width: '100%', paddingBottom: 10, paddingHorizontal: 6 },
+  stage: { flex: 1, width: '100%' },
   backCard: {
     position: 'absolute',
     top: 0,
-    left: 6,
-    right: 6,
-    bottom: 10,
+    left: 0,
+    right: 0,
+    bottom: 0,
     borderRadius: 22,
     backgroundColor: '#DADFCF',
     overflow: 'hidden',

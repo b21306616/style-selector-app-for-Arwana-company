@@ -18,10 +18,13 @@ jest.mock('../src/components/PhotoImage', () => {
 jest.mock('../src/components/SwipePhoto', () => {
   const React = require('react');
   const { Pressable, Text, View } = require('react-native');
-  return { SwipePhoto: ({ onReady, onFailure, label }: { onReady: () => void; onFailure: () => void; label: string }) => React.createElement(View, null,
+  return { SwipePhoto: ({ onReady, onFailure, onChoice, enabled, label }: { onReady: () => void; onFailure: () => void; onChoice: (choice: 'like' | 'dislike') => void; enabled: boolean; label: string }) => React.createElement(View, null,
     React.createElement(Text, null, label),
+    React.createElement(Text, null, enabled ? 'Swipe enabled' : 'Swipe disabled'),
     React.createElement(Pressable, { accessibilityRole: 'button', accessibilityLabel: 'Image finished loading', onPress: onReady }, React.createElement(Text, null, 'Image finished loading')),
     React.createElement(Pressable, { accessibilityRole: 'button', accessibilityLabel: 'Image failed', onPress: onFailure }, React.createElement(Text, null, 'Image failed')),
+    React.createElement(Pressable, { accessibilityRole: 'button', accessibilityLabel: 'Swipe like', onPress: () => onChoice('like') }, React.createElement(Text, null, 'Swipe like')),
+    React.createElement(Pressable, { accessibilityRole: 'button', accessibilityLabel: 'Swipe dislike', onPress: () => onChoice('dislike') }, React.createElement(Text, null, 'Swipe dislike')),
   ) };
 });
 
@@ -52,11 +55,16 @@ test('gallery hides style metadata and only accepts one rating after the image l
   await render(<GalleryScreen />);
   expect(screen.queryByText('Skandinaw')).not.toBeOnTheScreen();
   expect(screen.queryByText('Ýyly bitarap öwüşginler')).not.toBeOnTheScreen();
-  expect(screen.getByRole('button', { name: 'Haladym' })).toBeDisabled();
+  expect(screen.queryByRole('button', { name: 'Haladym' })).not.toBeOnTheScreen();
+  expect(screen.queryByRole('button', { name: 'Maňa däl' })).not.toBeOnTheScreen();
+  expect(screen.queryByText(/Çepe süýşür/)).not.toBeOnTheScreen();
+  expect(screen.getByText('Swipe disabled')).toBeOnTheScreen();
+  await fireEvent.press(screen.getByRole('button', { name: 'Swipe like' }));
+  expect(app.rate).not.toHaveBeenCalled();
   await fireEvent.press(screen.getByRole('button', { name: 'Image finished loading' }));
-  expect(screen.getByRole('button', { name: 'Haladym' })).toBeEnabled();
-  await fireEvent.press(screen.getByRole('button', { name: 'Haladym' }));
-  await fireEvent.press(screen.getByRole('button', { name: 'Maňa däl' }));
+  expect(screen.getByText('Swipe enabled')).toBeOnTheScreen();
+  await fireEvent.press(screen.getByRole('button', { name: 'Swipe like' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Swipe dislike' }));
   expect(app.rate).toHaveBeenCalledTimes(1);
   expect(app.rate).toHaveBeenCalledWith('like');
   await act(async () => finish());
@@ -128,12 +136,13 @@ test('liked-photo viewer uses accessible icon navigation with correct boundaries
 test('failed photos cannot be rated until a successful reload', async () => {
   await render(<GalleryScreen />);
   await fireEvent.press(screen.getByRole('button', { name: 'Image failed' }));
-  expect(screen.getByRole('button', { name: 'Haladym' })).toBeDisabled();
-  expect(screen.getByRole('button', { name: 'Maňa däl' })).toBeDisabled();
+  expect(screen.getByText('Swipe disabled')).toBeOnTheScreen();
+  await fireEvent.press(screen.getByRole('button', { name: 'Swipe like' }));
+  expect(app.rate).not.toHaveBeenCalled();
   await fireEvent.press(screen.getByRole('button', { name: 'Suraty täzeden açmak' }));
-  expect(screen.getByRole('button', { name: 'Haladym' })).toBeDisabled();
+  expect(screen.getByText('Swipe disabled')).toBeOnTheScreen();
   await fireEvent.press(screen.getByRole('button', { name: 'Image finished loading' }));
-  expect(screen.getByRole('button', { name: 'Haladym' })).toBeEnabled();
+  expect(screen.getByText('Swipe enabled')).toBeOnTheScreen();
   expect(app.rate).not.toHaveBeenCalled();
 });
 

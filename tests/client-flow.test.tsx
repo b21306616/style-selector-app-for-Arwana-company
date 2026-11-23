@@ -21,7 +21,7 @@ jest.mock('../src/components/PhotoImage', () => {
 jest.mock('../src/components/SwipePhoto', () => {
   const React = require('react');
   const { Pressable, Text, View } = require('react-native');
-  return { SwipePhoto: ({ onReady, onFailure, onChoice, enabled, label, entrance }: { onReady: () => void; onFailure: () => void; onChoice: (choice: 'like' | 'dislike') => void; enabled: boolean; label: string; entrance?: 'like' | 'dislike' | null }) => React.createElement(View, null,
+  return { SwipePhoto: ({ onReady, onFailure, onChoice, onEntranceSettled, enabled, label, entrance }: { onReady: () => void; onFailure: () => void; onChoice: (choice: 'like' | 'dislike') => void; onEntranceSettled?: () => void; enabled: boolean; label: string; entrance?: 'like' | 'dislike' | null }) => React.createElement(View, null,
     React.createElement(Text, null, label),
     React.createElement(Text, null, entrance ? `entrance ${entrance}` : 'entrance none'),
     React.createElement(Text, null, enabled ? 'Swipe enabled' : 'Swipe disabled'),
@@ -29,6 +29,7 @@ jest.mock('../src/components/SwipePhoto', () => {
     React.createElement(Pressable, { accessibilityRole: 'button', accessibilityLabel: 'Image failed', onPress: onFailure }, React.createElement(Text, null, 'Image failed')),
     React.createElement(Pressable, { accessibilityRole: 'button', accessibilityLabel: 'Swipe like', onPress: () => onChoice('like') }, React.createElement(Text, null, 'Swipe like')),
     React.createElement(Pressable, { accessibilityRole: 'button', accessibilityLabel: 'Swipe dislike', onPress: () => onChoice('dislike') }, React.createElement(Text, null, 'Swipe dislike')),
+    React.createElement(Pressable, { accessibilityRole: 'button', accessibilityLabel: 'Entrance settled', onPress: onEntranceSettled }, React.createElement(Text, null, 'Entrance settled')),
   ) };
 });
 
@@ -153,18 +154,22 @@ test('failed photos cannot be rated until a successful reload', async () => {
 test('undo brings a liked photo back from the like side', async () => {
   app.session = sessionWith(1);
   jest.mocked(app.undo).mockImplementation(async () => { app = { ...app, session: sessionWith(0) }; });
-  await render(<GalleryScreen />);
+  const view = await render(<GalleryScreen />);
   await act(async () => { fireEvent.press(screen.getByRole('button', { name: 'Soňky saýlawy yza gaýtarmak' })); });
+  await view.rerender(<GalleryScreen />);
   expect(app.undo).toHaveBeenCalledTimes(1);
   expect(screen.getByText('entrance like')).toBeOnTheScreen();
+  await fireEvent.press(screen.getByRole('button', { name: 'Entrance settled' }));
+  expect(screen.getByText('entrance none')).toBeOnTheScreen();
 });
 
 test('undo brings a disliked photo back from the dislike side', async () => {
   const photoId = seedCatalog.galleries.whole_house[0];
   app.session = { ...sessionWith(1), ratings: [{ photoId, choice: 'dislike' }] };
   jest.mocked(app.undo).mockImplementation(async () => { app = { ...app, session: sessionWith(0) }; });
-  await render(<GalleryScreen />);
+  const view = await render(<GalleryScreen />);
   await act(async () => { fireEvent.press(screen.getByRole('button', { name: 'Soňky saýlawy yza gaýtarmak' })); });
+  await view.rerender(<GalleryScreen />);
   expect(screen.getByText('entrance dislike')).toBeOnTheScreen();
 });
 

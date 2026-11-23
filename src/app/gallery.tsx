@@ -15,7 +15,7 @@ export default function GalleryScreen() {
   const lock = useRef(false);
   const routeEntrance = useLocalSearchParams<{ entrance?: string | string[] }>().entrance;
   const initialEntrance = Array.isArray(routeEntrance) ? routeEntrance[0] : routeEntrance;
-  const pendingEntrance = useRef<Choice | null>(initialEntrance === 'like' || initialEntrance === 'dislike' ? initialEntrance : null);
+  const [entrance, setEntrance] = useState<Choice | null>(initialEntrance === 'like' || initialEntrance === 'dislike' ? initialEntrance : null);
   const [failure, setFailure] = useState<string | null>(null);
   const [loadedId, setLoadedId] = useState<string | null>(null);
   const [failedImage, setFailedImage] = useState(false);
@@ -41,9 +41,9 @@ export default function GalleryScreen() {
     const choice = session?.ratings.at(-1)?.choice;
     if (!choice) return;
     lock.current = true;
-    pendingEntrance.current = choice;
+    setEntrance(choice);
     try { await app.undo(); setFailure(null); setLoadedId(null); setFailedImage(false); }
-    catch (error) { pendingEntrance.current = null; setFailure(errorText(error, language)); }
+    catch (error) { setEntrance(null); setFailure(errorText(error, language)); }
     finally { lock.current = false; }
   };
   const back = { label: tx(language, 'Otaglar', 'Пространства'), onPress: () => router.replace('/') };
@@ -52,7 +52,7 @@ export default function GalleryScreen() {
       <Header back={back} />
       <EmptyState title={tx(language, 'Otagy saýlaň', 'Выберите пространство')} description={tx(language, 'Interýerleri saýlap başlamak üçin otagy açyň.', 'Откройте комнату, чтобы начать выбор.')}><Button title={tx(language, 'Otagy saýlamak', 'Выбрать пространство')} onPress={() => router.replace('/')} /></EmptyState>
     </View> : session.status === 'complete' ? <ActivityIndicator color={colors.green} style={styles.waiting} /> : <View style={styles.stage}>
-      {photo ? <SwipePhoto key={photo.id + '-' + retry} photo={photo} nextPhoto={nextPhoto} language={language} enabled={loadedId === photo.id && !busy && !failedImage} entrance={pendingEntrance.current} onEntranceSettled={() => { pendingEntrance.current = null; }} onChoice={choice => void vote(choice)} onReady={() => { setLoadedId(photo.id); setFailedImage(false); }} onFailure={() => setFailedImage(true)} label={spaceLabel(photo.room, language) + '. ' + tx(language, 'Interýer suraty', 'Фотография интерьера') + ' ' + (position + 1) + ' / ' + deck.length} /> : <EmptyState title={tx(language, 'Surat elýeterli däl', 'Фото недоступно')} description={tx(language, 'Otaglara dolanyň we işgärden bu toplumy barlamagy haýyş ediň.', 'Вернитесь к комнатам и попросите сотрудника проверить подборку.')} />}
+      {photo ? <SwipePhoto key={photo.id + '-' + retry} photo={photo} nextPhoto={nextPhoto} language={language} enabled={loadedId === photo.id && !busy && !failedImage} entrance={entrance} onEntranceSettled={() => setEntrance(null)} onChoice={choice => void vote(choice)} onReady={() => { setLoadedId(photo.id); setFailedImage(false); }} onFailure={() => setFailedImage(true)} label={spaceLabel(photo.room, language) + '. ' + tx(language, 'Interýer suraty', 'Фотография интерьера') + ' ' + (position + 1) + ' / ' + deck.length} /> : <EmptyState title={tx(language, 'Surat elýeterli däl', 'Фото недоступно')} description={tx(language, 'Otaglara dolanyň we işgärden bu toplumy barlamagy haýyş ediň.', 'Вернитесь к комнатам и попросите сотрудника проверить подборку.')} />}
       {photo && loadedId !== photo.id && !failedImage ? <ActivityIndicator accessibilityLabel={tx(language, 'Surat açylýar', 'Открываем фото')} color={colors.green} style={styles.spinner} /> : null}
       {failedImage ? <View style={styles.failure}><Text style={[typography.small, styles.failureText]}>{tx(language, 'Surat elýeterli däl. Saýlaw ýazga geçirilmedi.', 'Фото недоступно. Выбор не записан.')}</Text><Button title={tx(language, 'Suraty täzeden açmak', 'Открыть ещё раз')} variant="secondary" onPress={() => { setFailedImage(false); setRetry(value => value + 1); }} /></View> : null}
       {failure || app.error ? <View pointerEvents="box-none" style={styles.errorOverlay}><ErrorBanner message={failure ?? errorText(app.error, language)} /></View> : null}

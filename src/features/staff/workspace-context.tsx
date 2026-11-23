@@ -9,6 +9,7 @@ import { createExport, discardExport, pickImportImages, pickWorkbook, shareExpor
 import { assertCatalogImages, discardPreparedPhotos, pickDraftPhoto } from '../../storage/images';
 
 export type PhotoFieldsValue = Pick<Photo, 'room' | 'styleId' | 'paletteIds' | 'materialIds' | 'detailIds'>;
+export type FeedbackArea = 'entry' | 'transfer';
 const emptyFields = (): PhotoFieldsValue => ({ room: 'bathroom', styleId: '', paletteIds: [], materialIds: [], detailIds: [] });
 const emptyTerm = (kind: TermKind = 'style'): Term => ({ id: Crypto.randomUUID(), kind, labels: { ru: '', tk: '' } });
 
@@ -27,6 +28,7 @@ function useWorkspaceController() {
   const [exports, updateExports] = useState<ExportFiles | null>(null);
   const [template, updateTemplate] = useState<ExportFiles | null>(null);
   const [operation, setOperation] = useState<string | null>(null);
+  const [feedbackArea, setFeedbackArea] = useState<FeedbackArea>('transfer');
   const [progress, setProgress] = useState('');
   const [error, setError] = useState<unknown>(null);
   const [success, setSuccess] = useState<'photo' | 'term' | 'import' | null>(null);
@@ -57,12 +59,12 @@ function useWorkspaceController() {
   function unlocked() { if (!auth.isUnlocked()) throw new AppError('STAFF_LOCKED'); }
   function active(signal: AbortSignal) { if (signal.aborted || !alive.current) throw new AppError('TRANSFER_CANCELED'); }
   const report = (done: number, total: number) => { if (alive.current) setProgress(`${done} / ${total}`); };
-  async function run(name: string, work: (signal: AbortSignal) => Promise<void>) {
+  async function run(name: string, work: (signal: AbortSignal) => Promise<void>, area: FeedbackArea = 'transfer') {
     if (pending.current || app.busy) return;
     pending.current = true;
     const abort = new AbortController();
     controller.current = abort;
-    setOperation(name); setProgress(''); setError(null); setSuccess(null);
+    setOperation(name); setFeedbackArea(area); setProgress(''); setError(null); setSuccess(null);
     try { unlocked(); await work(abort.signal); }
     catch (failure) { if (alive.current) setError(failure instanceof AppError ? failure : new AppError('TRANSFER_FAILED')); }
     finally {
@@ -78,13 +80,13 @@ function useWorkspaceController() {
     if (signal.aborted || !alive.current) { discardPreparedPhotos([next]); active(signal); }
     if (owned.current.photo) discardPreparedPhotos([owned.current.photo]);
     setPhoto(next);
-  });
+  }, 'entry');
   const savePhoto = () => run('save', async () => {
     if (!photo) return;
     unlocked();
     await app.saveDraft(current => { unlocked(); return addDraftPhoto(current, { ...photo, ...fields }, spaces); });
     setPhoto(null); setFields(emptyFields()); setSpaces([]); setSuccess('photo');
-  });
+  }, 'entry');
   const saveTerm = () => run('save', async () => {
     unlocked();
     await app.saveDraft(current => { unlocked(); return addDraftTerm(current, term); });
@@ -94,7 +96,7 @@ function useWorkspaceController() {
       return { ...current, [field]: [...current[field], term.id] };
     });
     setTerm(emptyTerm(term.kind)); setInlineTerm(false); setSuccess('term');
-  });
+  }, 'entry');
   const chooseWorkbook = () => run('workbook', async signal => {
     const next = await pickWorkbook(signal);
     active(signal);
@@ -155,16 +157,17 @@ function useWorkspaceController() {
     if (pending.current) return;
     if (owned.current.photo) discardPreparedPhotos([owned.current.photo]);
     setPhoto(null); setFields(emptyFields()); setSpaces([]); setTerm(emptyTerm()); setInlineTerm(false); setError(null);
+    if (feedbackArea === 'entry') setSuccess(null);
   };
   const discardImport = () => {
     if (pending.current) return;
     discardPreparedPhotos(owned.current.images.values()); setImages(new Map()); setBook(null); setError(null); setConfirmReplace(false);
   };
   const dirty = !!photo || JSON.stringify(fields) !== JSON.stringify(emptyFields()) || !!term.labels.ru || !!term.labels.tk || spaces.length > 0;
-  return { entryMode, setEntryMode, fields, setFields, spaces, setSpaces, photo, term, setTerm, inlineTerm, setInlineTerm, book, images, mode, setMode, review, exports, template, operation, progress, error, success, dirty,
+  return { entryMode, setEntryMode, fields, setFields, spaces, setSpaces, photo, term, setTerm, inlineTerm, setInlineTerm, book, images, mode, setMode, review, exports, template, operation, feedbackArea, progress, error, success, dirty,
     confirmReplace, setConfirmReplace, choosePhoto, savePhoto, saveTerm, chooseWorkbook, chooseImages, applyImport, exportDraft, makeTemplate, share, discardForm, discardImport,
     cancel: () => controller.current?.abort(), busy: !!operation || app.busy,
-    startTerm: (kind: TermKind) => { setTerm(emptyTerm(kind)); setInlineTerm(true); },
+    startTerm: (kind: TermKind) => { setTerm(emptyTerm(kind)); setInlineTerm(true); if (feedbackArea === 'entry') { setError(null); setSuccess(null); } },
   };
 }
 

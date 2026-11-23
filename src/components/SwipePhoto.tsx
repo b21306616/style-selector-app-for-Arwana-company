@@ -39,9 +39,8 @@ export function SwipePhoto({ photo, nextPhoto, language, enabled, onChoice, onRe
   const y = useSharedValue(0);
   const isCommitted = useSharedValue(false);
   const entering = useSharedValue(Boolean(entrance) && !motionReduced);
-  const settledRef = useRef(onEntranceSettled);
-  settledRef.current = onEntranceSettled;
   const entranceOnMount = useRef(entrance);
+  const settledOnMount = useRef(onEntranceSettled);
 
   useEffect(() => {
     const initial = entranceOnMount.current;
@@ -50,12 +49,12 @@ export function SwipePhoto({ photo, nextPhoto, language, enabled, onChoice, onRe
       x.value = 0;
       y.value = 0;
       entering.value = false;
-      settledRef.current?.();
+      settledOnMount.current?.();
       return;
     }
     entering.value = true;
     const origin = initial === 'like' ? exitDistance : -exitDistance;
-    const finishEntrance = () => settledRef.current?.();
+    const finishEntrance = () => settledOnMount.current?.();
     x.value = origin;
     x.value = withTiming(0, { duration: 240, easing: Easing.out(Easing.quad) }, (finished) => {
       'worklet';

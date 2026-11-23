@@ -1,9 +1,10 @@
-import { useState, type ReactNode } from 'react';
-import { Text, View } from 'react-native';
-import { Button, Chip, TextField, spaceLabel, tx } from '../../components/ui';
+import { useMemo, useState, type ReactNode } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
+import { Button, Chip, TextField, colors, spaceLabel, tx, typography } from '../../components/ui';
 import { ROOMS, type Language, type Labels, type Term, type TermKind } from '../../domain/types';
 import { kindLabel, staffStyles as s } from './shared';
 import type { PhotoFieldsValue } from './workspace-context';
+import { SelectionField, type SelectionOption } from './SelectionField';
 
 export function TermLabelFields({ labels, onChange, disabled = false }: { labels: Labels; onChange: (labels: Labels) => void; disabled?: boolean }) {
   return <>
@@ -32,9 +33,14 @@ function TermChoices({ terms, kind, language, selected, onSelect, disabled }: {
   </View>;
 }
 
-export function PhotoMetadataFields({ value, terms, language, onChange, onAddTerm, renderTermEditor, disabled = false }: {
+type PhotoMetadataProps = {
   value: PhotoFieldsValue; terms: Term[]; language: Language; onChange: (value: PhotoFieldsValue) => void; onAddTerm?: (kind: TermKind) => void; renderTermEditor?: (kind: TermKind) => ReactNode; disabled?: boolean;
-}) {
+  presentation?: 'chips' | 'compact'; onPickerVisibilityChange?: (visible: boolean) => void;
+};
+
+export function PhotoMetadataFields(props: PhotoMetadataProps) {
+  const { value, terms, language, onChange, onAddTerm, renderTermEditor, disabled = false } = props;
+  if (props.presentation === 'compact') return <CompactPhotoMetadataFields {...props} />;
   return <>
     <View style={s.section}>
       <Text style={s.label}>{tx(language, 'Otag', 'Комната')}</Text>
@@ -53,3 +59,37 @@ export function PhotoMetadataFields({ value, terms, language, onChange, onAddTer
     })}
   </>;
 }
+
+function CompactPhotoMetadataFields({ value, terms, language, onChange, onAddTerm, renderTermEditor, disabled = false, onPickerVisibilityChange }: PhotoMetadataProps) {
+  const grouped = useMemo(() => {
+    const result: Record<TermKind, SelectionOption[]> = { style: [], palette: [], material: [], detail: [] };
+    for (const term of terms) result[term.kind].push(term);
+    return result;
+  }, [terms]);
+  const rooms = useMemo(() => ROOMS.map(room => ({ id: room, labels: { ru: spaceLabel(room, 'ru'), tk: spaceLabel(room, 'tk') } })), []);
+  const termField = (kind: TermKind) => {
+    const field = kind === 'palette' ? 'paletteIds' : kind === 'material' ? 'materialIds' : 'detailIds';
+    return <SelectionField key={kind} label={kindLabel(kind, language)} language={language} options={grouped[kind]} searchable allowClear multiple={kind !== 'style'} disabled={disabled}
+      selectedIds={kind === 'style' ? value.styleId ? [value.styleId] : [] : value[field]}
+      onChange={ids => onChange(kind === 'style' ? { ...value, styleId: ids[0] ?? '' } : { ...value, [field]: ids })}
+      onCreate={onAddTerm ? () => onAddTerm(kind) : undefined} editor={renderTermEditor?.(kind)} onVisibilityChange={onPickerVisibilityChange} />;
+  };
+  return <>
+    <View style={compact.section}>
+      <Text accessibilityRole="header" style={compact.heading}>{tx(language, 'Otag we stil', 'Комната и стиль')}</Text>
+      <SelectionField label={tx(language, 'Otag', 'Комната')} language={language} options={rooms} selectedIds={[value.room]} disabled={disabled}
+        onChange={ids => { const room = ROOMS.find(room => room === ids[0]); if (room) onChange({ ...value, room }); }} onVisibilityChange={onPickerVisibilityChange} />
+      {termField('style')}
+    </View>
+    <View style={[compact.section, compact.divided]}>
+      <Text accessibilityRole="header" style={compact.heading}>{tx(language, 'Aýratynlyklar', 'Характеристики')}</Text>
+      <Text style={typography.small}>{tx(language, 'Her meýdanda birnäçe wariant saýlap bilersiňiz.', 'В каждом поле можно выбрать несколько вариантов.')}</Text>
+      {termField('palette')}{termField('material')}{termField('detail')}
+    </View>
+  </>;
+}
+
+const compact = StyleSheet.create({
+  section: { gap: 14 }, heading: { ...typography.body, color: colors.ink, fontWeight: '600' },
+  divided: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingTop: 20 },
+});

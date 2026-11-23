@@ -8,7 +8,10 @@ import { seedCatalog } from '../src/data/catalog';
 import type { Session } from '../src/domain/types';
 import { useApp, type AppContextValue } from '../src/state/AppProvider';
 
-jest.mock('expo-router', () => ({ router: { push: jest.fn(), replace: jest.fn() } }));
+jest.mock('expo-router', () => ({
+  router: { push: jest.fn(), replace: jest.fn(), setParams: jest.fn() },
+  useLocalSearchParams: () => ({}),
+}));
 jest.mock('../src/state/AppProvider', () => ({ useApp: jest.fn() }));
 jest.mock('../src/components/PhotoImage', () => {
   const React = require('react');
@@ -18,8 +21,9 @@ jest.mock('../src/components/PhotoImage', () => {
 jest.mock('../src/components/SwipePhoto', () => {
   const React = require('react');
   const { Pressable, Text, View } = require('react-native');
-  return { SwipePhoto: ({ onReady, onFailure, onChoice, enabled, label }: { onReady: () => void; onFailure: () => void; onChoice: (choice: 'like' | 'dislike') => void; enabled: boolean; label: string }) => React.createElement(View, null,
+  return { SwipePhoto: ({ onReady, onFailure, onChoice, enabled, label, entrance }: { onReady: () => void; onFailure: () => void; onChoice: (choice: 'like' | 'dislike') => void; enabled: boolean; label: string; entrance?: 'like' | 'dislike' | null }) => React.createElement(View, null,
     React.createElement(Text, null, label),
+    React.createElement(Text, null, entrance ? `entrance ${entrance}` : 'entrance none'),
     React.createElement(Text, null, enabled ? 'Swipe enabled' : 'Swipe disabled'),
     React.createElement(Pressable, { accessibilityRole: 'button', accessibilityLabel: 'Image finished loading', onPress: onReady }, React.createElement(Text, null, 'Image finished loading')),
     React.createElement(Pressable, { accessibilityRole: 'button', accessibilityLabel: 'Image failed', onPress: onFailure }, React.createElement(Text, null, 'Image failed')),
@@ -144,6 +148,48 @@ test('failed photos cannot be rated until a successful reload', async () => {
   await fireEvent.press(screen.getByRole('button', { name: 'Image finished loading' }));
   expect(screen.getByText('Swipe enabled')).toBeOnTheScreen();
   expect(app.rate).not.toHaveBeenCalled();
+});
+
+test('undo brings a liked photo back from the like side', async () => {
+  app.session = sessionWith(1);
+  jest.mocked(app.undo).mockImplementation(async () => { app = { ...app, session: sessionWith(0) }; });
+  await render(<GalleryScreen />);
+  await act(async () => { fireEvent.press(screen.getByRole('button', { name: 'Soňky saýlawy yza gaýtarmak' })); });
+  expect(app.undo).toHaveBeenCalledTimes(1);
+  expect(screen.getByText('entrance like')).toBeOnTheScreen();
+});
+
+test('undo brings a disliked photo back from the dislike side', async () => {
+  const photoId = seedCatalog.galleries.whole_house[0];
+  app.session = { ...sessionWith(1), ratings: [{ photoId, choice: 'dislike' }] };
+  jest.mocked(app.undo).mockImplementation(async () => { app = { ...app, session: sessionWith(0) }; });
+  await render(<GalleryScreen />);
+  await act(async () => { fireEvent.press(screen.getByRole('button', { name: 'Soňky saýlawy yza gaýtarmak' })); });
+  expect(screen.getByText('entrance dislike')).toBeOnTheScreen();
+});
+
+test('undo stays disabled before the first rating', async () => {
+  await render(<GalleryScreen />);
+  expect(screen.getByRole('button', { name: 'Soňky saýlawy yza gaýtarmak' })).toBeDisabled();
+  await fireEvent.press(screen.getByRole('button', { name: 'Soňky saýlawy yza gaýtarmak' }));
+  expect(app.undo).not.toHaveBeenCalled();
+  expect(screen.getByText('entrance none')).toBeOnTheScreen();
+});
+
+test('changing the last choice opens the gallery from that choice side', async () => {
+  app.session = sessionWith(32, true);
+  await render(<ResultScreen />);
+  await act(async () => { fireEvent.press(screen.getByRole('button', { name: 'Soňky saýlawy üýtgetmek' })); });
+  expect(app.undo).toHaveBeenCalledTimes(1);
+  expect(router.replace).toHaveBeenCalledWith({ pathname: '/gallery', params: { entrance: 'like' } });
+});
+
+test('continuing a preliminary result opens the gallery without a return animation', async () => {
+  app.session = sessionWith(20);
+  await render(<ResultScreen />);
+  await fireEvent.press(screen.getByRole('button', { name: 'Saýlamagy dowam etmek' }));
+  expect(router.replace).toHaveBeenCalledWith('/gallery');
+  expect(app.undo).not.toHaveBeenCalled();
 });
 
 test('no liked photos produces an honest empty result and no invented style', async () => {

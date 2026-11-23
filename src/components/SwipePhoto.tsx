@@ -1,3 +1,4 @@
+import { useEffect, useRef } from 'react';
 import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
 import Animated, {
@@ -24,15 +25,48 @@ export interface SwipePhotoProps {
   onReady: () => void;
   onFailure: () => void;
   label: string;
+  entrance?: Choice | null;
+  onEntranceSettled?: () => void;
 }
 
-export function SwipePhoto({ photo, nextPhoto, language, enabled, onChoice, onReady, onFailure, label }: SwipePhotoProps) {
+export function SwipePhoto({ photo, nextPhoto, language, enabled, onChoice, onReady, onFailure, label, entrance = null, onEntranceSettled }: SwipePhotoProps) {
   const { width: windowWidth } = useWindowDimensions();
   const exitDistance = Math.max(windowWidth * 1.3, 520);
-  const x = useSharedValue(0);
+  const reduceMotion = useReducedMotion();
+  const motionReduced = reduceMotion === true;
+  const entranceX = entrance === 'like' ? exitDistance : entrance === 'dislike' ? -exitDistance : 0;
+  const x = useSharedValue(motionReduced ? 0 : entranceX);
   const y = useSharedValue(0);
   const isCommitted = useSharedValue(false);
-  const reduceMotion = useReducedMotion();
+  const entering = useSharedValue(Boolean(entrance) && !motionReduced);
+  const settledRef = useRef(onEntranceSettled);
+  settledRef.current = onEntranceSettled;
+  const entranceOnMount = useRef(entrance);
+
+  useEffect(() => {
+    const initial = entranceOnMount.current;
+    if (!initial) return;
+    if (motionReduced) {
+      x.value = 0;
+      y.value = 0;
+      entering.value = false;
+      settledRef.current?.();
+      return;
+    }
+    entering.value = true;
+    const origin = initial === 'like' ? exitDistance : -exitDistance;
+    const finishEntrance = () => settledRef.current?.();
+    x.value = origin;
+    x.value = withTiming(0, { duration: 240, easing: Easing.out(Easing.quad) }, (finished) => {
+      'worklet';
+      if (finished) {
+        entering.value = false;
+        scheduleOnRN(finishEntrance);
+      }
+    });
+    // The return belongs to the card that mounted with an entrance. A later prop change is the photo already on screen, and must not fly in again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const gesture = usePanGesture({
     enabled,
@@ -41,14 +75,14 @@ export function SwipePhoto({ photo, nextPhoto, language, enabled, onChoice, onRe
     maxPointers: 1,
     onUpdate: (event) => {
       'worklet';
-      if (!isCommitted.value) {
+      if (!isCommitted.value && !entering.value) {
         x.value = event.translationX;
         y.value = event.translationY * 0.18;
       }
     },
     onDeactivate: (event) => {
       'worklet';
-      if (isCommitted.value) return;
+      if (isCommitted.value || entering.value) return;
       const isQuickFlick = Math.abs(event.translationX) > 28 && Math.abs(event.velocityX) > 600;
       const isPastThreshold = Math.abs(event.translationX) > 85;
 
@@ -86,7 +120,7 @@ export function SwipePhoto({ photo, nextPhoto, language, enabled, onChoice, onRe
     },
     onFinalize: () => {
       'worklet';
-      if (!isCommitted.value) {
+      if (!isCommitted.value && !entering.value) {
         if (reduceMotion) {
           x.value = 0;
           y.value = 0;

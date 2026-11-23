@@ -4,7 +4,7 @@ import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppModal } from '../components/AppModal';
 import { ConfirmDialog } from '../components/ConfirmDialog';
-import { IconButton } from '../components/Icon';
+import { IconButton, UndoIconButton } from '../components/Icon';
 import { PhotoTile } from '../components/PhotoTile';
 import { PhotoImage } from '../components/PhotoImage';
 import { Button, Chip, EmptyState, ErrorBanner, Header, Screen, colors, errorText, photoCount, spaceLabel, tx, typography, useLayout } from '../components/ui';
@@ -33,7 +33,9 @@ export default function ResultScreen() {
     catch (error) { setConfirmNew(false); setFailure(errorText(error, language)); }
   };
   const lastChoice = async () => {
-    try { await app.undo(); router.replace('/gallery'); }
+    const choice = session?.ratings.at(-1)?.choice;
+    if (!choice) return;
+    try { await app.undo(); router.replace({ pathname: '/gallery', params: { entrance: choice } }); }
     catch (error) { setFailure(errorText(error, language)); }
   };
   if (!session || !summary || (!complete && session.ratings.length < 20)) return <Screen>
@@ -52,7 +54,7 @@ export default function ResultScreen() {
   const viewing = selected !== null ? likedPhotos[selected] : undefined;
   const scrollActions = layout.fontScale >= 1.5 || layout.height < 500;
   const actions = <View style={styles.actions}>
-    {!complete ? <Button title={tx(language, 'Saýlamagy dowam etmek', 'Продолжить выбор')} onPress={() => router.replace('/gallery')} disabled={busy} style={{ flexGrow: 1 }} /> : session.ratings.length > 0 ? <IconButton label={tx(language, 'Soňky saýlawy üýtgetmek', 'Изменить последний выбор')} fallbackLabel={tx(language, 'Yza gaýtarmak', 'Отменить')} icon="undo" onPress={() => void lastChoice()} disabled={busy} /> : null}
+    {!complete ? <Button title={tx(language, 'Saýlamagy dowam etmek', 'Продолжить выбор')} onPress={() => router.replace('/gallery')} disabled={busy} style={{ flexGrow: 1 }} /> : session.ratings.length > 0 ? <UndoIconButton label={tx(language, 'Soňky saýlawy üýtgetmek', 'Изменить последний выбор')} fallbackLabel={tx(language, 'Yza gaýtarmak', 'Отменить')} onPress={() => void lastChoice()} disabled={busy} /> : null}
     <Button title={tx(language, 'Täze müşderi', 'Новый клиент')} accessibilityLabel={tx(language, 'Täze müşderi bilen başlamak', 'Новый клиент')} variant="secondary" onPress={() => setConfirmNew(true)} disabled={busy} style={{ flexGrow: 1 }} />
   </View>;
   return <Screen scroll={false} style={{ gap: 10 }}>

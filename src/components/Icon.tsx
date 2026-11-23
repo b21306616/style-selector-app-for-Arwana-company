@@ -3,6 +3,7 @@ import { SymbolView, type SymbolViewProps } from 'expo-symbols';
 import regular from 'expo-symbols/androidWeights/regular';
 import { createContext, useContext, type PropsWithChildren } from 'react';
 import { ActivityIndicator, Platform, Pressable, StyleSheet, Text, useWindowDimensions, type StyleProp, type ViewStyle } from 'react-native';
+import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 import { colors } from '../ui/theme';
 
 const symbols = {
@@ -48,6 +49,24 @@ export function IconButton({ icon, label, fallbackLabel = label, onPress, disabl
     style={({ pressed }) => [styles.button, prominent && styles.prominent, !ready && styles.textButton, (disabled || loading) && styles.disabled, pressed && styles.pressed, style]}>
     {loading ? <ActivityIndicator color={color} /> : <Icon name={icon} color={color} size={prominent ? 30 : 24} fallback={fallbackLabel} />}
   </Pressable>;
+}
+
+export function UndoIconButton({ onPress, ...rest }: Omit<Parameters<typeof IconButton>[0], 'icon'>) {
+  const reduceMotion = useReducedMotion();
+  const nudge = useSharedValue(0);
+  const motion = useAnimatedStyle(() => ({
+    transform: [{ translateX: nudge.value * 12 }, { rotate: `${nudge.value * 18}deg` }],
+  }));
+  const press = () => {
+    if (reduceMotion !== true) {
+      nudge.value = withSequence(
+        withTiming(-1, { duration: 120, easing: Easing.out(Easing.quad) }),
+        withSpring(0, { damping: 14, stiffness: 220 }),
+      );
+    }
+    onPress();
+  };
+  return <Animated.View style={motion}><IconButton icon="undo" onPress={press} {...rest} /></Animated.View>;
 }
 
 const styles = StyleSheet.create({

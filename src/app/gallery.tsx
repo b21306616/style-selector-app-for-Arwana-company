@@ -7,6 +7,8 @@ import { Button, EmptyState, ErrorBanner, Header, Screen, colors, errorText, spa
 import type { Choice } from '../domain/types';
 import { useApp } from '../state/AppProvider';
 
+const veil = 'rgba(255,254,250,0.55)';
+
 export default function GalleryScreen() {
   const app = useApp();
   const { session, language, busy } = app;
@@ -34,34 +36,47 @@ export default function GalleryScreen() {
     catch (error) { setFailure(errorText(error, language)); }
     finally { lock.current = false; }
   };
+  const back = { label: tx(language, 'Otaglar', 'Пространства'), onPress: () => router.replace('/') };
   return <Screen scroll={false} style={styles.screen}>
-    <Header back={{ label: tx(language, 'Otaglar', 'Пространства'), onPress: () => router.replace('/') }} right={<Text style={typography.eyebrow}>ARWANA</Text>} />
-    {!session ? <EmptyState title={tx(language, 'Otagy saýlaň', 'Выберите пространство')} description={tx(language, 'Interýerleri saýlap başlamak üçin otagy açyň.', 'Откройте комнату, чтобы начать выбор.')}><Button title={tx(language, 'Otagy saýlamak', 'Выбрать пространство')} onPress={() => router.replace('/')} /></EmptyState> : session.status === 'complete' ? <ActivityIndicator color={colors.green} /> : <>
-      <View style={styles.progressHeader}><Text accessibilityRole="header" style={[typography.subheading, { flex: 1 }]}>{spaceLabel(session.space, language)}</Text><Text accessibilityLiveRegion="polite" style={styles.counter}>{position + 1}<Text style={typography.small}> / {deck.length}</Text></Text></View>
-      <View accessibilityRole="progressbar" accessibilityValue={{ min: 0, max: deck.length, now: position }} accessibilityLabel={tx(language, 'Görülen suratlar', 'Просмотрено фотографий')} style={styles.progressTrack}><View style={[styles.progressFill, { width: ((position / Math.max(deck.length, 1)) * 100) + '%' }]} /></View>
-      {failure || app.error ? <ErrorBanner message={failure ?? errorText(app.error, language)} /> : null}
-      <View style={styles.stage}>
-        {photo ? <SwipePhoto key={photo.id + '-' + retry} photo={photo} nextPhoto={nextPhoto} language={language} enabled={loadedId === photo.id && !busy && !failedImage} onChoice={choice => void vote(choice)} onReady={() => { setLoadedId(photo.id); setFailedImage(false); }} onFailure={() => setFailedImage(true)} label={spaceLabel(photo.room, language) + '. ' + tx(language, 'Interýer suraty', 'Фотография интерьера') + ' ' + (position + 1) + ' / ' + deck.length} /> : <EmptyState title={tx(language, 'Surat elýeterli däl', 'Фото недоступно')} description={tx(language, 'Otaglara dolanyň we işgärden bu toplumy barlamagy haýyş ediň.', 'Вернитесь к комнатам и попросите сотрудника проверить подборку.')} />}
-        {photo && loadedId !== photo.id && !failedImage ? <ActivityIndicator accessibilityLabel={tx(language, 'Surat açylýar', 'Открываем фото')} color={colors.green} style={styles.spinner} /> : null}
-        {failedImage ? <View style={styles.failure}><Text style={[typography.small, styles.failureText]}>{tx(language, 'Surat elýeterli däl. Saýlaw ýazga geçirilmedi.', 'Фото недоступно. Выбор не записан.')}</Text><Button title={tx(language, 'Suraty täzeden açmak', 'Открыть ещё раз')} variant="secondary" onPress={() => { setFailedImage(false); setRetry(value => value + 1); }} /></View> : null}
+    {!session ? <View style={styles.fallback}>
+      <Header back={back} />
+      <EmptyState title={tx(language, 'Otagy saýlaň', 'Выберите пространство')} description={tx(language, 'Interýerleri saýlap başlamak üçin otagy açyň.', 'Откройте комнату, чтобы начать выбор.')}><Button title={tx(language, 'Otagy saýlamak', 'Выбрать пространство')} onPress={() => router.replace('/')} /></EmptyState>
+    </View> : session.status === 'complete' ? <ActivityIndicator color={colors.green} style={styles.waiting} /> : <View style={styles.stage}>
+      {photo ? <SwipePhoto key={photo.id + '-' + retry} photo={photo} nextPhoto={nextPhoto} language={language} enabled={loadedId === photo.id && !busy && !failedImage} onChoice={choice => void vote(choice)} onReady={() => { setLoadedId(photo.id); setFailedImage(false); }} onFailure={() => setFailedImage(true)} label={spaceLabel(photo.room, language) + '. ' + tx(language, 'Interýer suraty', 'Фотография интерьера') + ' ' + (position + 1) + ' / ' + deck.length} /> : <EmptyState title={tx(language, 'Surat elýeterli däl', 'Фото недоступно')} description={tx(language, 'Otaglara dolanyň we işgärden bu toplumy barlamagy haýyş ediň.', 'Вернитесь к комнатам и попросите сотрудника проверить подборку.')} />}
+      {photo && loadedId !== photo.id && !failedImage ? <ActivityIndicator accessibilityLabel={tx(language, 'Surat açylýar', 'Открываем фото')} color={colors.green} style={styles.spinner} /> : null}
+      {failedImage ? <View style={styles.failure}><Text style={[typography.small, styles.failureText]}>{tx(language, 'Surat elýeterli däl. Saýlaw ýazga geçirilmedi.', 'Фото недоступно. Выбор не записан.')}</Text><Button title={tx(language, 'Suraty täzeden açmak', 'Открыть ещё раз')} variant="secondary" onPress={() => { setFailedImage(false); setRetry(value => value + 1); }} /></View> : null}
+      {failure || app.error ? <View pointerEvents="box-none" style={styles.errorOverlay}><ErrorBanner message={failure ?? errorText(app.error, language)} /></View> : null}
+      <View pointerEvents="box-none" style={styles.topOverlay}>
+        <IconButton icon="back" label={back.label} onPress={back.onPress} style={styles.pill} />
+        <Text accessibilityRole="header" style={styles.room} numberOfLines={1}>{spaceLabel(session.space, language)}</Text>
       </View>
-      <View style={styles.footer}>
-        <IconButton label={tx(language, 'Soňky saýlawy yza gaýtarmak', 'Отменить последний выбор')} fallbackLabel={tx(language, 'Yza gaýtarmak', 'Отменить')} icon="undo" disabled={busy || position === 0} onPress={() => void undo()} />
-        {position >= 20 ? <Button title={tx(language, 'Deslapky netijäni görmek', 'Предварительный результат')} variant="secondary" onPress={() => router.replace('/result')} disabled={busy} /> : position === 0 ? <Text style={[typography.small, styles.hint]}>{deck.length > 20 ? tx(language, 'Netije 20 saýlawdan soň elýeterli', 'Результат после 20 оценок') : tx(language, 'Netije soňky suratdan soň', 'Результат после последнего фото')}</Text> : null}
+      <View pointerEvents="box-none" style={styles.bottomOverlay}>
+        <View pointerEvents="box-none" style={styles.controlRow}>
+          <IconButton label={tx(language, 'Soňky saýlawy yza gaýtarmak', 'Отменить последний выбор')} fallbackLabel={tx(language, 'Yza gaýtarmak', 'Отменить')} icon="undo" disabled={busy || position === 0} onPress={() => void undo()} style={styles.pill} />
+          <Text accessibilityRole="progressbar" accessibilityLiveRegion="polite" accessibilityLabel={tx(language, 'Görülen suratlar', 'Просмотрено фотографий')} accessibilityValue={{ min: 0, max: deck.length, now: position }} style={styles.counter}>{position + 1}<Text style={styles.counterTotal}> / {deck.length}</Text></Text>
+          {position >= 20 ? <Button title={tx(language, 'Deslapky netijäni görmek', 'Предварительный результат')} variant="secondary" onPress={() => router.replace('/result')} disabled={busy} style={styles.action} /> : null}
+        </View>
+        {position === 0 ? <Text style={styles.hint}>{deck.length > 20 ? tx(language, 'Netije 20 saýlawdan soň elýeterli', 'Результат после 20 оценок') : tx(language, 'Netije soňky suratdan soň', 'Результат после последнего фото')}</Text> : null}
       </View>
-    </>}
+    </View>}
   </Screen>;
 }
 const styles = StyleSheet.create({
-  screen: { gap: 8, paddingTop: 4, paddingBottom: 8 },
-  progressHeader: { flexDirection: 'row', gap: 16, alignItems: 'center' },
-  counter: { fontSize: 20, fontWeight: '500', color: colors.green },
-  progressTrack: { height: 3, borderRadius: 4, backgroundColor: colors.border, overflow: 'hidden' },
-  progressFill: { height: 3, backgroundColor: colors.green, borderRadius: 4 },
+  screen: { gap: 0, paddingTop: 0, paddingBottom: 0, paddingHorizontal: 0, maxWidth: '100%', alignSelf: 'stretch' },
+  fallback: { flex: 1, paddingHorizontal: 16, paddingTop: 8, gap: 16 },
+  waiting: { marginTop: 24 },
   stage: { flex: 1, minHeight: 160 },
   spinner: { position: 'absolute', alignSelf: 'center', top: '45%' },
-  failure: { position: 'absolute', left: 12, right: 12, bottom: 12, gap: 8, padding: 12, borderRadius: 14, backgroundColor: colors.surface },
+  failure: { position: 'absolute', left: 12, right: 12, bottom: 112, gap: 8, padding: 12, borderRadius: 14, backgroundColor: colors.surface },
   failureText: { textAlign: 'center' },
-  footer: { alignItems: 'center', gap: 8 },
-  hint: { textAlign: 'center' },
+  errorOverlay: { position: 'absolute', top: 72, left: 12, right: 12 },
+  topOverlay: { position: 'absolute', top: 8, left: 8, right: 8, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  bottomOverlay: { position: 'absolute', left: 8, right: 8, bottom: 8, gap: 8, alignItems: 'flex-start' },
+  controlRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
+  pill: { backgroundColor: veil, borderWidth: 0 },
+  room: { flexShrink: 1, overflow: 'hidden', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, backgroundColor: veil, fontSize: 16, lineHeight: 22, fontWeight: '600', color: colors.ink },
+  counter: { overflow: 'hidden', minHeight: 48, paddingHorizontal: 14, borderRadius: 24, backgroundColor: veil, fontSize: 16, lineHeight: 48, fontWeight: '600', color: colors.ink },
+  counterTotal: { fontSize: 13, lineHeight: 48, fontWeight: '500', color: colors.muted },
+  action: { backgroundColor: veil, borderWidth: 0 },
+  hint: { overflow: 'hidden', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: veil, fontSize: 13, lineHeight: 19, color: colors.muted },
 });

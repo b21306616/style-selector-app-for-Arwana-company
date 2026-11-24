@@ -120,9 +120,14 @@ function useWorkspaceController() {
     setSpaces(current => current.filter(space => space === 'whole_house'));
     setRoom(emptyRoom()); setInlineRoom(false); setSuccess('room');
   }, 'entry');
-  const deleteOptions = (kind: 'room' | 'style', ids: string[]) => run('delete', async () => {
+  const deleteOptions = (kind: 'room' | TermKind, ids: string[]) => run('delete', async () => {
     await app.saveDraft(current => { unlocked(); return removeDraftOptions(current, kind, ids); });
-    setFields(current => kind === 'room' && ids.includes(current.room) ? { ...current, room: '' } : kind === 'style' && ids.includes(current.styleId) ? { ...current, styleId: '' } : current);
+    setFields(current => {
+      if (kind === 'room') return ids.includes(current.room) ? { ...current, room: '' } : current;
+      if (kind === 'style') return ids.includes(current.styleId) ? { ...current, styleId: '' } : current;
+      const field = kind === 'palette' ? 'paletteIds' : kind === 'material' ? 'materialIds' : 'detailIds';
+      return { ...current, [field]: current[field].filter(id => !ids.includes(id)) };
+    });
     if (kind === 'room') setSpaces(current => current.filter(space => !ids.includes(space)));
     setSuccess('deleted');
   }, 'entry');

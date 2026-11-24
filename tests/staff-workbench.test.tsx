@@ -322,7 +322,7 @@ test('a room can be created without a photo, searched in either language, and de
   expect(controller.photo).toBeNull();
 });
 
-test.each(['room', 'style'] as const)('bulk %s deletion preserves search selections and protects used options', async kind => {
+test.each(['room', 'style', 'palette', 'material', 'detail'] as const)('bulk %s deletion preserves search selections and protects used options', async kind => {
   const unused = [
     { id: 'unused-1', labels: { ru: 'Первый', tk: 'Birinji' } },
     { id: 'unused-2', labels: { ru: 'Второй', tk: 'Ikinji' } },
@@ -330,14 +330,17 @@ test.each(['room', 'style'] as const)('bulk %s deletion preserves search selecti
   if (kind === 'room') {
     app.draft!.rooms.push(...unused);
     app.draft!.galleries['unused-1'] = []; app.draft!.galleries['unused-2'] = [];
-  } else app.draft!.terms.push(...unused.map(option => ({ ...option, kind: 'style' as const })));
+  } else app.draft!.terms.push(...unused.map(option => ({ ...option, kind })));
   await render(<StaffWorkspaceProvider><Probe /></StaffWorkspaceProvider>);
-  const label = kind === 'room' ? 'Комната' : 'Стиль';
+  const label = kind === 'room' ? 'Комната' : kind === 'style' ? 'Стиль' : kind === 'palette' ? 'Палитра' : kind === 'material' ? 'Материалы' : 'Детали';
+  const usedLabel = kind === 'room' ? 'Кухня' : kind === 'style' ? 'Минимализм' : kind === 'palette' ? 'Тёплые нейтральные тона' : kind === 'material' ? 'Натуральный дуб' : 'Лаконичные линии';
+  const selectionRole = kind === 'room' || kind === 'style' ? 'radio' : 'checkbox';
   await fireEvent.press(screen.getByRole('button', { name: label }));
-  expect(screen.queryByRole('button', { name: 'Сбросить выбор' })).toBeNull();
-  await fireEvent.press(screen.getByRole('radio', { name: 'Первый' }));
+  if (kind === 'room' || kind === 'style') expect(screen.queryByRole('button', { name: 'Сбросить выбор' })).toBeNull();
+  else expect(screen.getByRole('button', { name: 'Сбросить выбор' })).toBeDisabled();
+  await fireEvent.press(screen.getByRole(selectionRole, { name: 'Первый' }));
   await fireEvent.press(screen.getByRole('button', { name: 'Выбрать для удаления' }));
-  expect(screen.getByRole('checkbox', { name: kind === 'room' ? 'Кухня' : 'Минимализм' })).toBeDisabled();
+  expect(screen.getByRole('checkbox', { name: usedLabel })).toBeDisabled();
   await fireEvent.press(screen.getByRole('button', { name: 'Выбрать все' }));
   expect(screen.getByRole('button', { name: 'Удалить (2)' })).toBeEnabled();
   await fireEvent.press(screen.getByRole('button', { name: 'Снять все' }));
@@ -352,7 +355,9 @@ test.each(['room', 'style'] as const)('bulk %s deletion preserves search selecti
   await fireEvent.press(screen.getByRole('button', { name: 'Удалить (2)' }));
   await fireEvent.press(screen.getByRole('button', { name: 'Удалить (2)' }));
   expect((kind === 'room' ? app.draft!.rooms : app.draft!.terms).some(item => item.id.startsWith('unused-'))).toBe(false);
-  expect(kind === 'room' ? controller.fields.room : controller.fields.styleId).toBe('');
+  if (kind === 'room') expect(controller.fields.room).toBe('');
+  else if (kind === 'style') expect(controller.fields.styleId).toBe('');
+  else expect(controller.fields[kind === 'palette' ? 'paletteIds' : kind === 'material' ? 'materialIds' : 'detailIds']).toEqual([]);
   expect(app.draft!.photos).toEqual(seedCatalog.photos);
 });
 

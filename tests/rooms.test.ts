@@ -37,6 +37,20 @@ test('bulk deletion is atomic and protects all saved draft photo assignments', (
   expect(() => removeDraftOptions(draft, 'room', ['missing'])).toThrow('STALE_DRAFT');
 });
 
+test.each(['palette', 'material', 'detail'] as const)('bulk %s deletion protects saved photo tags and deletes unused tags', kind => {
+  const draft = cloneCatalog(seedCatalog);
+  const referenced = draft.terms.find(term => term.kind === kind)!;
+  const unused = { id: `${kind}-unused`, kind, labels: { ru: 'Свободный', tk: 'Boş' } };
+  draft.terms.push(unused);
+
+  expect(() => removeDraftOptions(draft, kind, [unused.id, referenced.id])).toThrow('REFERENCED_TERM');
+  expect(draft.terms).toContainEqual(unused);
+
+  const next = removeDraftOptions(draft, kind, [unused.id]);
+  expect(next.terms).not.toContainEqual(unused);
+  expect(next.photos).toEqual(draft.photos);
+});
+
 test('unused built-in rooms can be removed, including the final room', () => {
   const draft = { ...cloneCatalog(seedCatalog), photos: [], galleries: Object.fromEntries(Object.keys(seedCatalog.galleries).map(id => [id, []])) };
   const empty = removeDraftOptions(draft, 'room', draft.rooms.map(room => room.id));

@@ -36,7 +36,7 @@ function TermChoices({ terms, kind, language, selected, onSelect, disabled }: {
 type PhotoMetadataProps = {
   value: PhotoFieldsValue; terms: Term[]; rooms: RoomDefinition[]; photos?: Photo[]; language: Language; onChange: (value: PhotoFieldsValue) => void; onAddTerm?: (kind: TermKind) => void; renderTermEditor?: (kind: TermKind) => ReactNode; disabled?: boolean;
   onAddRoom?: () => void; roomEditor?: ReactNode; pickerFeedback?: ReactNode; onManage?: () => void;
-  onDeleteOptions?: (kind: 'room' | 'style', ids: string[]) => Promise<boolean>;
+  onDeleteOptions?: (kind: 'room' | TermKind, ids: string[]) => Promise<boolean>;
   presentation?: 'chips' | 'compact'; onPickerVisibilityChange?: (visible: boolean) => void;
 };
 
@@ -65,16 +65,19 @@ export function PhotoMetadataFields(props: PhotoMetadataProps) {
 function CompactPhotoMetadataFields({ value, terms, rooms, photos = [], language, onChange, onAddTerm, renderTermEditor, disabled = false, onPickerVisibilityChange, onAddRoom, roomEditor, onDeleteOptions, pickerFeedback, onManage }: PhotoMetadataProps) {
   const usage = useMemo(() => {
     const rooms = new Map<string, number>();
-    const styles = new Map<string, number>();
+    const terms: Record<TermKind, Map<string, number>> = { style: new Map(), palette: new Map(), material: new Map(), detail: new Map() };
     for (const photo of photos) {
       rooms.set(photo.room, (rooms.get(photo.room) ?? 0) + 1);
-      styles.set(photo.styleId, (styles.get(photo.styleId) ?? 0) + 1);
+      terms.style.set(photo.styleId, (terms.style.get(photo.styleId) ?? 0) + 1);
+      for (const [kind, ids] of [
+        ['palette', photo.paletteIds], ['material', photo.materialIds], ['detail', photo.detailIds],
+      ] as const) for (const id of new Set(ids)) terms[kind].set(id, (terms[kind].get(id) ?? 0) + 1);
     }
-    return { rooms, styles };
+    return { rooms, terms };
   }, [photos]);
   const grouped = useMemo(() => {
     const result: Record<TermKind, SelectionOption[]> = { style: [], palette: [], material: [], detail: [] };
-    for (const term of terms) result[term.kind].push({ ...term, usageCount: term.kind === 'style' ? usage.styles.get(term.id) ?? 0 : 0 });
+    for (const term of terms) result[term.kind].push({ ...term, usageCount: usage.terms[term.kind].get(term.id) ?? 0 });
     return result;
   }, [terms, usage]);
   const roomOptions = useMemo(() => rooms.map(room => ({ ...room, usageCount: usage.rooms.get(room.id) ?? 0 })), [rooms, usage]);
@@ -84,7 +87,7 @@ function CompactPhotoMetadataFields({ value, terms, rooms, photos = [], language
       allowDeselect={kind === 'style'} closeOnSelect={false} feedback={pickerFeedback} onManage={onManage}
       createLabel={kind === 'style' ? tx(language, '＋ Täze stil', '＋ Новый стиль') : undefined}
       editorTitle={kind === 'style' ? tx(language, 'Täze stil', 'Новый стиль') : undefined}
-      onDelete={kind === 'style' && onDeleteOptions ? ids => onDeleteOptions('style', ids) : undefined}
+      onDelete={onDeleteOptions ? ids => onDeleteOptions(kind, ids) : undefined}
       selectedIds={kind === 'style' ? value.styleId ? [value.styleId] : [] : value[field]}
       onChange={ids => onChange(kind === 'style' ? { ...value, styleId: ids[0] ?? '' } : { ...value, [field]: ids })}
       onCreate={onAddTerm ? () => onAddTerm(kind) : undefined} editor={renderTermEditor?.(kind)} onVisibilityChange={onPickerVisibilityChange} />;

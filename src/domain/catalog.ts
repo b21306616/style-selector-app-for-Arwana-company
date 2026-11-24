@@ -112,12 +112,18 @@ export function addDraftRoom(current: Catalog, room: RoomDefinition): Catalog {
 }
 
 /** Recheck the entire batch on the latest draft before changing any records. */
-export function removeDraftOptions(current: Catalog, kind: 'room' | 'style', ids: string[]): Catalog {
+export function removeDraftOptions(current: Catalog, kind: 'room' | TermKind, ids: string[]): Catalog {
   const selected = new Set(ids);
-  const available = kind === 'room' ? current.rooms : current.terms.filter(term => term.kind === 'style');
+  const available = kind === 'room' ? current.rooms : current.terms.filter(term => term.kind === kind);
   if (ids.some(id => !available.some(option => option.id === id))) throw new AppError('STALE_DRAFT');
-  if (current.photos.some(photo => selected.has(kind === 'room' ? photo.room : photo.styleId))) throw new AppError(kind === 'room' ? 'REFERENCED_ROOM' : 'REFERENCED_TERM');
-  if (kind === 'style') return { ...current, terms: current.terms.filter(term => !selected.has(term.id)) };
+  const referenced = current.photos.some(photo => {
+    if (kind === 'room') return selected.has(photo.room);
+    if (kind === 'style') return selected.has(photo.styleId);
+    const field = kind === 'palette' ? photo.paletteIds : kind === 'material' ? photo.materialIds : photo.detailIds;
+    return field.some(id => selected.has(id));
+  });
+  if (referenced) throw new AppError(kind === 'room' ? 'REFERENCED_ROOM' : 'REFERENCED_TERM');
+  if (kind !== 'room') return { ...current, terms: current.terms.filter(term => !selected.has(term.id)) };
   const galleries = { ...current.galleries };
   for (const id of selected) delete galleries[id];
   return { ...current, rooms: current.rooms.filter(room => !selected.has(room.id)), galleries };

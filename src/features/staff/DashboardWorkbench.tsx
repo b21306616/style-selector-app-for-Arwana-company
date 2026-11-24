@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
 import { Button, Chip, colors, spaceLabel, tx, typography, useLayout } from '../../components/ui';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
-import { SPACES } from '../../domain/types';
+import { catalogSpaces } from '../../domain/rooms';
 import { useApp } from '../../state/AppProvider';
 import { DraftEntryCard } from './DraftEntryCard';
 import { WorkspaceFeedback } from './WorkspaceFeedback';
@@ -55,7 +55,7 @@ export function DashboardWorkbench() {
         {[ [t('Goşular', 'Добавится'), w.review.added], [t('Täzelener', 'Обновится'), w.review.updated], [t('Aýrylar', 'Удалится'), w.review.removed] ].map(([label, count]) => <View style={styles.stat} key={label}><Text style={styles.statNumber}>{count}</Text><Text style={typography.small}>{label}</Text></View>)}
       </View>
       <Text style={typography.small}>{t('Netije', 'После импорта')}: {w.review.catalog.photos.length} {t('surat', 'фото')} · {w.review.catalog.terms.length} {t('termin', 'терминов')}</Text>
-      {SPACES.map(space => <View key={space} style={styles.summaryRow}><Text style={[typography.small, { flex: 1 }]}>{spaceLabel(space, language)}</Text><Text style={s.label}>{draft.galleries[space].length} → {w.review!.catalog.galleries[space].length}</Text></View>)}
+      {catalogSpaces(w.review.catalog).map(space => <View key={space} style={styles.summaryRow}><Text style={[typography.small, { flex: 1 }]}>{spaceLabel(space, language, w.review!.catalog.rooms)}</Text><Text style={s.label}>{draft.galleries[space].length} → {w.review!.catalog.galleries[space].length}</Text></View>)}
       {w.review.warnings > 0 && <Text style={typography.small}>{t('Çap etmezden ozal tegleri tamamlamak gerek. Ähli meseleler çap ediş synynda görkeziler.', 'Перед публикацией потребуется дополнить теги. Все замечания будут доступны на экране проверки публикации.')}</Text>}
       {w.review.issues.length > 0 && <View style={styles.issues} accessibilityLiveRegion="polite">
         <Text style={s.label}>{t('Düzetmeli meseleler', 'Исправьте ошибки')}: {w.review.issues.length}</Text>

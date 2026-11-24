@@ -4,24 +4,40 @@ import { useApp } from '../../state/AppProvider';
 import { useStaffAuth } from './auth-context';
 import { addDraftPhoto, addDraftTerm, draftFingerprint, previewImport, TRANSFER_LIMITS, type ImportMode, type ImportPreview } from '../../domain/catalog-transfer';
 import { AppError } from '../../domain/errors';
-import type { Photo, Space, Term, TermKind } from '../../domain/types';
+import { addDraftRoom, removeDraftOptions } from '../../domain/catalog';
+import { hasRoom } from '../../domain/rooms';
+import type { Photo, RoomDefinition, Space, Term, TermKind } from '../../domain/types';
 import { createExport, discardExport, pickImportImages, pickWorkbook, shareExport, type ExportFiles } from '../../storage/catalog-files';
 import { assertCatalogImages, discardPreparedPhotos, pickDraftPhoto } from '../../storage/images';
 
 export type PhotoFieldsValue = Pick<Photo, 'room' | 'styleId' | 'paletteIds' | 'materialIds' | 'detailIds'>;
 export type FeedbackArea = 'entry' | 'transfer';
-const emptyFields = (): PhotoFieldsValue => ({ room: 'bathroom', styleId: '', paletteIds: [], materialIds: [], detailIds: [] });
+const emptyFields = (): PhotoFieldsValue => ({ room: '', styleId: '', paletteIds: [], materialIds: [], detailIds: [] });
 const emptyTerm = (kind: TermKind = 'style'): Term => ({ id: Crypto.randomUUID(), kind, labels: { ru: '', tk: '' } });
+const emptyRoom = (): RoomDefinition => ({ id: Crypto.randomUUID(), labels: { ru: '', tk: '' } });
 
 function useWorkspaceController() {
   const app = useApp();
   const auth = useStaffAuth();
-  const [entryMode, setEntryMode] = useState<'photo' | 'term'>('photo');
-  const [fields, setFields] = useState(emptyFields);
-  const [spaces, setSpaces] = useState<Space[]>([]);
+  const [fieldInput, setFields] = useState(emptyFields);
+  const fields = useMemo(() => {
+    if (!app.draft) return fieldInput;
+    const terms = new Map(app.draft.terms.map(term => [term.id, term.kind]));
+    return {
+      room: hasRoom(app.draft, fieldInput.room) ? fieldInput.room : '',
+      styleId: terms.get(fieldInput.styleId) === 'style' ? fieldInput.styleId : '',
+      paletteIds: fieldInput.paletteIds.filter(id => terms.get(id) === 'palette'),
+      materialIds: fieldInput.materialIds.filter(id => terms.get(id) === 'material'),
+      detailIds: fieldInput.detailIds.filter(id => terms.get(id) === 'detail'),
+    };
+  }, [app.draft, fieldInput]);
+  const [spaceInput, setSpaces] = useState<Space[]>([]);
+  const spaces = spaceInput.filter(space => space === 'whole_house' || (!!fields.room && space === fields.room));
   const [photo, updatePhoto] = useState<Photo | null>(null);
   const [term, setTerm] = useState(emptyTerm);
   const [inlineTerm, setInlineTerm] = useState(false);
+  const [room, setRoom] = useState(emptyRoom);
+  const [inlineRoom, setInlineRoom] = useState(false);
   const [book, setBook] = useState<Awaited<ReturnType<typeof pickWorkbook>>>(null);
   const [images, updateImages] = useState(new Map<string, Photo>());
   const [mode, setMode] = useState<ImportMode>('merge');
@@ -31,7 +47,7 @@ function useWorkspaceController() {
   const [feedbackArea, setFeedbackArea] = useState<FeedbackArea>('transfer');
   const [progress, setProgress] = useState('');
   const [error, setError] = useState<unknown>(null);
-  const [success, setSuccess] = useState<'photo' | 'term' | 'import' | null>(null);
+  const [success, setSuccess] = useState<'photo' | 'term' | 'room' | 'deleted' | 'import' | null>(null);
   const [confirmReplace, updateConfirmReplace] = useState(false);
   const replacement = useRef<ImportPreview | null>(null);
   const pending = useRef(false);
@@ -60,13 +76,13 @@ function useWorkspaceController() {
   function active(signal: AbortSignal) { if (signal.aborted || !alive.current) throw new AppError('TRANSFER_CANCELED'); }
   const report = (done: number, total: number) => { if (alive.current) setProgress(`${done} / ${total}`); };
   async function run(name: string, work: (signal: AbortSignal) => Promise<void>, area: FeedbackArea = 'transfer') {
-    if (pending.current || app.busy) return;
+    if (pending.current || app.busy) return false;
     pending.current = true;
     const abort = new AbortController();
     controller.current = abort;
     setOperation(name); setFeedbackArea(area); setProgress(''); setError(null); setSuccess(null);
-    try { unlocked(); await work(abort.signal); }
-    catch (failure) { if (alive.current) setError(failure instanceof AppError ? failure : new AppError('TRANSFER_FAILED')); }
+    try { unlocked(); await work(abort.signal); return true; }
+    catch (failure) { if (alive.current) setError(failure instanceof AppError ? failure : new AppError('TRANSFER_FAILED')); return false; }
     finally {
       pending.current = false;
       controller.current = null;
@@ -84,6 +100,7 @@ function useWorkspaceController() {
   const savePhoto = () => run('save', async () => {
     if (!photo) return;
     unlocked();
+    if (!app.draft || !hasRoom(app.draft, fields.room)) throw new AppError('ROOM_REQUIRED');
     await app.saveDraft(current => { unlocked(); return addDraftPhoto(current, { ...photo, ...fields }, spaces); });
     setPhoto(null); setFields(emptyFields()); setSpaces([]); setSuccess('photo');
   }, 'entry');
@@ -97,6 +114,24 @@ function useWorkspaceController() {
     });
     setTerm(emptyTerm(term.kind)); setInlineTerm(false); setSuccess('term');
   }, 'entry');
+  const saveRoom = () => run('save', async () => {
+    await app.saveDraft(current => { unlocked(); return addDraftRoom(current, room); });
+    setFields(current => ({ ...current, room: room.id }));
+    setSpaces(current => current.filter(space => space === 'whole_house'));
+    setRoom(emptyRoom()); setInlineRoom(false); setSuccess('room');
+  }, 'entry');
+  const deleteOptions = (kind: 'room' | 'style', ids: string[]) => run('delete', async () => {
+    await app.saveDraft(current => { unlocked(); return removeDraftOptions(current, kind, ids); });
+    setFields(current => kind === 'room' && ids.includes(current.room) ? { ...current, room: '' } : kind === 'style' && ids.includes(current.styleId) ? { ...current, styleId: '' } : current);
+    if (kind === 'room') setSpaces(current => current.filter(space => !ids.includes(space)));
+    setSuccess('deleted');
+  }, 'entry');
+  const removePhoto = () => {
+    if (pending.current || app.busy) return;
+    if (owned.current.photo) discardPreparedPhotos([owned.current.photo]);
+    setPhoto(null);
+    if (feedbackArea === 'entry') { setError(null); setSuccess(null); }
+  };
   const chooseWorkbook = () => run('workbook', async signal => {
     const next = await pickWorkbook(signal);
     active(signal);
@@ -156,18 +191,20 @@ function useWorkspaceController() {
   const discardForm = () => {
     if (pending.current) return;
     if (owned.current.photo) discardPreparedPhotos([owned.current.photo]);
-    setPhoto(null); setFields(emptyFields()); setSpaces([]); setTerm(emptyTerm()); setInlineTerm(false); setError(null);
+    setPhoto(null); setFields(emptyFields()); setSpaces([]); setTerm(emptyTerm()); setInlineTerm(false); setRoom(emptyRoom()); setInlineRoom(false); setError(null);
     if (feedbackArea === 'entry') setSuccess(null);
   };
   const discardImport = () => {
     if (pending.current) return;
     discardPreparedPhotos(owned.current.images.values()); setImages(new Map()); setBook(null); setError(null); setConfirmReplace(false);
   };
-  const dirty = !!photo || JSON.stringify(fields) !== JSON.stringify(emptyFields()) || !!term.labels.ru || !!term.labels.tk || spaces.length > 0;
-  return { entryMode, setEntryMode, fields, setFields, spaces, setSpaces, photo, term, setTerm, inlineTerm, setInlineTerm, book, images, mode, setMode, review, exports, template, operation, feedbackArea, progress, error, success, dirty,
-    confirmReplace, setConfirmReplace, choosePhoto, savePhoto, saveTerm, chooseWorkbook, chooseImages, applyImport, exportDraft, makeTemplate, share, discardForm, discardImport,
+  const dirty = !!photo || JSON.stringify(fields) !== JSON.stringify(emptyFields()) || !!term.labels.ru || !!term.labels.tk || !!room.labels.ru || !!room.labels.tk || spaces.length > 0;
+  return { fields, setFields, spaces, setSpaces, photo, term, setTerm, inlineTerm, setInlineTerm, room, setRoom, inlineRoom, setInlineRoom, book, images, mode, setMode, review, exports, template, operation, feedbackArea, progress, error, success, dirty,
+    confirmReplace, setConfirmReplace, choosePhoto, removePhoto, savePhoto, saveTerm, saveRoom, deleteOptions, chooseWorkbook, chooseImages, applyImport, exportDraft, makeTemplate, share, discardForm, discardImport,
     cancel: () => controller.current?.abort(), busy: !!operation || app.busy,
     startTerm: (kind: TermKind) => { setTerm(emptyTerm(kind)); setInlineTerm(true); if (feedbackArea === 'entry') { setError(null); setSuccess(null); } },
+    startRoom: () => { setRoom(emptyRoom()); setInlineRoom(true); if (feedbackArea === 'entry') { setError(null); setSuccess(null); } },
+    clearEntryFeedback: () => { if (feedbackArea === 'entry') { setError(null); setSuccess(null); } },
   };
 }
 

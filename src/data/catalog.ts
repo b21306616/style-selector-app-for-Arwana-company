@@ -1,4 +1,5 @@
 import { ROOMS, type Catalog, type Photo, type Term } from '../domain/types';
+import { defaultRooms } from '../domain/rooms';
 
 const styles = ['scandinavian', 'minimalist', 'modern_classic', 'industrial'] as const;
 
@@ -33,6 +34,7 @@ const photos: Photo[] = ROOMS.flatMap((room) => [1, 2, 3].flatMap((variant) => s
 export const seedCatalog: Catalog = {
   id: 'sample-v1', version: 1, createdAt: '2026-11-17T00:00:00.000Z', sample: true,
   terms: seedTerms,
+  rooms: defaultRooms.map(room => ({ ...room, labels: { ...room.labels } })),
   photos,
   galleries: {
     bathroom: photos.filter((photo) => photo.room === 'bathroom').map((photo) => photo.id),

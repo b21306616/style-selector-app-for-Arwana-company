@@ -34,7 +34,7 @@ test('empty and unmatched vocabulary lists still offer term creation', async () 
   const create = jest.fn();
   const view = await render(<Field items={[]} multiple create={create} />);
   await fireEvent.press(screen.getByRole('button', { name: 'Материалы' }));
-  expect(screen.getByText('В этой категории пока нет терминов.')).toBeOnTheScreen();
+  expect(screen.getByText('Пока нет вариантов. Добавьте новый.')).toBeOnTheScreen();
   await fireEvent.press(screen.getByRole('button', { name: '＋ Добавить: Материалы' }));
   expect(create).toHaveBeenCalledTimes(1);
   await view.rerender(<Field multiple create={create} />);

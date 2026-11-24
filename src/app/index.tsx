@@ -4,7 +4,7 @@ import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-nati
 import { ConfirmDialog } from '../components/ConfirmDialog';
 import { PhotoTile } from '../components/PhotoTile';
 import { Button, ErrorBanner, Header, Screen, colors, errorText, photoCount, spaceLabel, tx, typography, useLayout } from '../components/ui';
-import { ROOMS, type Language, type Space } from '../domain/types';
+import { type Language, type Space } from '../domain/types';
 import { useApp } from '../state/AppProvider';
 
 export default function HomeScreen() {
@@ -29,14 +29,14 @@ export default function HomeScreen() {
     {failure || app.error ? <ErrorBanner message={failure ?? errorText(app.error, language)} onRetry={() => { setFailure(null); void app.refresh(); }} retryLabel={tx(language, 'Gaýtadan synanyşyň', 'Повторить')} /> : null}
     {app.notices.length ? <View style={{ gap: 12 }}>{app.notices.map(code => <ErrorBanner key={code} message={errorText(code, language)} />)}<Button title={tx(language, 'Düşnükli', 'Понятно')} variant="ghost" onPress={app.dismissNotices} /></View> : null}
     {!app.ready ? <ActivityIndicator color={colors.green} size="large" /> : <>
-      {session ? <View style={styles.resume}><Text style={[typography.small, { flexGrow: 1, flexShrink: 1 }]}>{spaceLabel(session.space, language)} · {session.ratings.length}/{session.catalog.galleries[session.space].length}</Text><Button title={session.status === 'complete' ? tx(language, 'Netije', 'Результат') : tx(language, 'Dowam etmek', 'Продолжить')} onPress={() => router.push(session.status === 'complete' ? '/result' : '/gallery')} variant="ghost" /></View> : null}
+      {session ? <View style={styles.resume}><Text style={[typography.small, { flexGrow: 1, flexShrink: 1 }]}>{spaceLabel(session.space, language, session.catalog.rooms)} · {session.ratings.length}/{session.catalog.galleries[session.space].length}</Text><Button title={session.status === 'complete' ? tx(language, 'Netije', 'Результат') : tx(language, 'Dowam etmek', 'Продолжить')} onPress={() => router.push(session.status === 'complete' ? '/result' : '/gallery')} variant="ghost" /></View> : null}
       <Text accessibilityRole="header" style={typography.heading}>{tx(language, 'Otagy saýlaň', 'Выберите пространство')}</Text>
       <View style={[styles.spaces, layout.wide && styles.spacesWide]}>
-        <PhotoTile photo={hero} thumbnail={false} language={language} title={spaceLabel('whole_house', language)} subtitle={total ? photoCount(total, language) : tx(language, 'Elýeterli däl', 'Недоступно')} label={spaceLabel('whole_house', language) + ', ' + photoCount(total, language)} disabled={busy || !total} onPress={() => choose('whole_house')} style={layout.wide ? { width: (layout.contentWidth - 16) * 0.44, alignSelf: 'flex-start' } : undefined} imageStyle={{ aspectRatio: layout.wide ? 0.94 : 1.85 }} />
-        <View style={[styles.grid, { width: roomsWidth }]}>{ROOMS.map(room => {
+        <PhotoTile photo={hero} thumbnail={false} language={language} title={spaceLabel('whole_house', language, catalog?.rooms ?? [])} subtitle={total ? photoCount(total, language) : tx(language, 'Elýeterli däl', 'Недоступно')} label={spaceLabel('whole_house', language, catalog?.rooms ?? []) + ', ' + photoCount(total, language)} disabled={busy || !total} onPress={() => choose('whole_house')} style={layout.wide ? { width: (layout.contentWidth - 16) * 0.44, alignSelf: 'flex-start' } : undefined} imageStyle={{ aspectRatio: layout.wide ? 0.94 : 1.85 }} />
+        <View style={[styles.grid, { width: roomsWidth }]}>{(catalog?.rooms ?? []).map(({ id: room }) => {
           const ids = catalog?.galleries[room] ?? [];
           const photo = catalog?.photos.find(item => item.id === ids[0]);
-          return <PhotoTile key={room} photo={photo} language={language} title={spaceLabel(room, language)} subtitle={ids.length ? photoCount(ids.length, language) : tx(language, 'Elýeterli däl', 'Недоступно')} label={spaceLabel(room, language) + ', ' + photoCount(ids.length, language)} disabled={busy || !ids.length} onPress={() => choose(room)} style={{ width: (roomsWidth - (roomColumns - 1) * 12) / roomColumns }} />;
+          return <PhotoTile key={room} photo={photo} language={language} title={spaceLabel(room, language, catalog?.rooms ?? [])} subtitle={ids.length ? photoCount(ids.length, language) : tx(language, 'Elýeterli däl', 'Недоступно')} label={spaceLabel(room, language, catalog?.rooms ?? []) + ', ' + photoCount(ids.length, language)} disabled={busy || !ids.length} onPress={() => choose(room)} style={{ width: (roomsWidth - (roomColumns - 1) * 12) / roomColumns }} />;
         })}</View>
       </View>
       <View style={styles.footer}>{catalog?.sample ? <Text style={typography.small}>{tx(language, 'Interýer nusgalary', 'Примеры интерьеров')}</Text> : null}<Button title={tx(language, 'Işgärler', 'Сотрудникам')} variant="ghost" onPress={() => router.push('/staff/dashboard')} /></View>

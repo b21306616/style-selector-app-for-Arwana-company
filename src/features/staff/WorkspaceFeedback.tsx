@@ -10,16 +10,16 @@ export function WorkspaceFeedback({ area }: { area: FeedbackArea }) {
   const t = (tk: string, ru: string) => tx(language, tk, ru);
   if (w.feedbackArea !== area) return null;
   const names: Record<string, string> = {
-    photo: t('Surat taýýarlanýar', 'Подготовка фотографии'), workbook: t('Excel okalýar', 'Чтение Excel'), images: t('Suratlar taýýarlanýar', 'Подготовка фотографий'),
+    delete: t('Öçürilýär', 'Удаление'), photo: t('Surat taýýarlanýar', 'Подготовка фотографии'), workbook: t('Excel okalýar', 'Чтение Excel'), images: t('Suratlar taýýarlanýar', 'Подготовка фотографий'),
     export: t('Eksport taýýarlanýar', 'Подготовка экспорта'), template: t('Şablon taýýarlanýar', 'Подготовка шаблона'), share: t('Faýly saklamak / paýlaşmak', 'Сохранение / отправка файла'), save: t('Ýatda saklanylýar', 'Сохранение'),
   };
   return <>
     {w.operation && <View style={styles.progress} accessibilityLiveRegion="polite">
       <View style={styles.row}><ActivityIndicator color={colors.green} /><Text style={styles.message}>{names[w.operation]} {w.progress}</Text></View>
-      {!['save', 'share'].includes(w.operation) && <Button title={t('Amaly ýatyrmak', 'Отменить операцию')} variant="ghost" onPress={w.cancel} />}
+      {!['save', 'share', 'delete'].includes(w.operation) && <Button title={t('Amaly ýatyrmak', 'Отменить операцию')} variant="ghost" onPress={w.cancel} />}
     </View>}
     {!!w.error && <View accessible accessibilityRole="alert" accessibilityLiveRegion="polite"><ErrorBanner message={`${messageForError(w.error, language)}${w.error instanceof AppError && w.error.detail ? ` ${w.error.detail}` : ''}`} /></View>}
-    {w.success && <Text accessibilityLiveRegion="polite" style={styles.success}>{w.success === 'photo' ? t('Surat garalama goşuldy.', 'Фото добавлено в черновик.') : w.success === 'term' ? t('Termin garalama goşuldy.', 'Термин добавлен в черновик.') : t('Import garalama ýazdyryldy.', 'Импорт сохранён в черновик.')}</Text>}
+    {w.success && <Text accessibilityLiveRegion="polite" style={styles.success}>{w.success === 'photo' ? t('Surat garalama goşuldy.', 'Фото добавлено в черновик.') : w.success === 'term' ? t('Termin garalama goşuldy.', 'Термин добавлен в черновик.') : w.success === 'room' ? t('Otag garalama goşuldy.', 'Комната добавлена в черновик.') : w.success === 'deleted' ? t('Saýlanan ýazgylar öçürildi.', 'Выбранные записи удалены.') : t('Import garalama ýazdyryldy.', 'Импорт сохранён в черновик.')}</Text>}
   </>;
 }
 

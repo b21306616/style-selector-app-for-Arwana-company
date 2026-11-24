@@ -12,7 +12,8 @@ import { useApp } from '../../state/AppProvider';
 import { DashboardWorkbench } from '../../features/staff/DashboardWorkbench';
 import { useStaffWorkspace } from '../../features/staff/workspace-context';
 import { staffStyles as s } from '../../features/staff/shared';
-import { SPACES, Space, type Photo } from '../../domain/types';
+import { Space, type Photo } from '../../domain/types';
+import { catalogSpaces } from '../../domain/rooms';
 import { messageForError } from '../../domain/errors';
 
 export default function StaffDashboard() {
@@ -41,9 +42,11 @@ export default function StaffDashboard() {
 
   if (!draft || !catalog) return null;
 
+  const overviewRooms = [...draft.rooms, ...catalog.rooms.filter(room => !draft.rooms.some(item => item.id === room.id))];
+  const overviewSpaces = catalogSpaces({ rooms: overviewRooms });
   const links = [
     { route: '/staff/photos' as const, title: t('Suratlar', 'Фотографии'), count: String(draft.photos.length) },
-    { route: '/staff/galleries' as const, title: t('Toplumlar', 'Подборки'), count: '5' },
+    { route: '/staff/galleries' as const, title: t('Toplumlar', 'Подборки'), count: String(catalogSpaces(draft).length) },
     { route: '/staff/vocabulary' as const, title: t('Stiller we aýratynlyklar', 'Стили и особенности'), count: String(draft.terms.length) },
   ];
 
@@ -57,16 +60,16 @@ export default function StaffDashboard() {
     <Button title={t('Barlamak we çap etmek', 'Проверить и опубликовать')} onPress={() => router.push('/staff/preview')} disabled={workspace.busy} />
     <Text accessibilityRole="header" style={typography.subheading}>{t('Toplumlara umumy syn', 'Обзор подборок')}</Text>
     <View style={styles.overviewCard}>
-      {SPACES.map((space, index) => {
+      {overviewSpaces.map((space, index) => {
         const publishedCount = catalog.galleries[space]?.length ?? 0;
         const draftCount = draft.galleries[space]?.length ?? 0;
-        const isLast = index === SPACES.length - 1;
+        const isLast = index === overviewSpaces.length - 1;
         return <View key={space} style={[styles.spaceRow, (contentWidth < 390 || fontScale >= 1.5) && { flexDirection: 'column', alignItems: 'flex-start' }, !isLast && styles.spaceRowDivider]}>
-          <Text style={styles.spaceTitle}>{spaceLabel(space, language)}</Text>
+          <Text style={styles.spaceTitle}>{spaceLabel(space, language, overviewRooms)}</Text>
           <View style={styles.spaceActions}>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`${spaceLabel(space, language)}, ${t('Çap edilen', 'Опубликовано')}: ${publishedCount}`}
+              accessibilityLabel={`${spaceLabel(space, language, overviewRooms)}, ${t('Çap edilen', 'Опубликовано')}: ${publishedCount}`}
               onPress={() => setGalleryModal({ space, mode: 'published' })}
               hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
               style={({ pressed }) => [styles.textAction, pressed && styles.pressed]}
@@ -77,7 +80,7 @@ export default function StaffDashboard() {
             </Pressable>
             <Pressable
               accessibilityRole="button"
-              accessibilityLabel={`${spaceLabel(space, language)}, ${t('Garalama', 'Черновик')}: ${draftCount}`}
+              accessibilityLabel={`${spaceLabel(space, language, overviewRooms)}, ${t('Garalama', 'Черновик')}: ${draftCount}`}
               onPress={() => setGalleryModal({ space, mode: 'draft' })}
               hitSlop={{ top: 8, bottom: 8, left: 6, right: 6 }}
               style={({ pressed }) => [styles.textAction, pressed && styles.pressed]}
@@ -100,7 +103,7 @@ export default function StaffDashboard() {
     >
       {galleryModal && <Screen scroll={false}>
         <Header
-          title={spaceLabel(galleryModal.space, language)}
+          title={spaceLabel(galleryModal.space, language, [...(activeSource?.rooms ?? []), ...overviewRooms])}
           subtitle={`${galleryModal.mode === 'published' ? t('Çap edilen', 'Опубликовано') : t('Garalama', 'Черновик')} · ${activePhotos.length}`}
           right={<IconButton icon="close" label={t('Ýapmak', 'Закрыть')} fallbackLabel={t('Ýapmak', 'Закрыть')} onPress={() => { setViewingPhoto(null); setGalleryModal(null); }} />}
         />
@@ -117,10 +120,10 @@ export default function StaffDashboard() {
               <PhotoTile
                 photo={item}
                 language={language}
-                title={spaceLabel(item.room, language)}
+                title={spaceLabel(item.room, language, activeSource?.rooms ?? [])}
                 subtitle={termsMap.get(item.styleId) ?? t('Tegler ýok', 'Без тегов')}
                 badge={String(index + 1)}
-                label={`${spaceLabel(item.room, language)}, ${termsMap.get(item.styleId) ?? ''}, ${index + 1}`}
+                label={`${spaceLabel(item.room, language, activeSource?.rooms ?? [])}, ${termsMap.get(item.styleId) ?? ''}, ${index + 1}`}
                 onPress={() => setViewingPhoto(item)}
               />
             </View>
@@ -140,7 +143,7 @@ export default function StaffDashboard() {
       <SafeAreaView style={styles.viewer}>
         <View style={styles.viewerHeader}>
           <Text style={styles.viewerTitle}>
-            {viewingPhoto ? `${spaceLabel(viewingPhoto.room, language)}${termsMap.get(viewingPhoto.styleId) ? ' · ' + termsMap.get(viewingPhoto.styleId) : ''}` : ''}
+            {viewingPhoto ? `${spaceLabel(viewingPhoto.room, language, activeSource?.rooms ?? [])}${termsMap.get(viewingPhoto.styleId) ? ' · ' + termsMap.get(viewingPhoto.styleId) : ''}` : ''}
           </Text>
           <IconButton
             label={tx(language, 'Ýapmak', 'Закрыть')}
@@ -156,7 +159,7 @@ export default function StaffDashboard() {
             language={language}
             fit="contain"
             style={styles.fullImage}
-            label={`${spaceLabel(viewingPhoto.room, language)}, ${termsMap.get(viewingPhoto.styleId) ?? ''}`}
+            label={`${spaceLabel(viewingPhoto.room, language, activeSource?.rooms ?? [])}, ${termsMap.get(viewingPhoto.styleId) ?? ''}`}
           />
         )}
       </SafeAreaView>

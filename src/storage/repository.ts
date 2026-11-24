@@ -3,7 +3,8 @@ import { seedCatalog } from '../data/catalog';
 import { cloneCatalog, validateCatalog } from '../domain/catalog';
 import { AppError } from '../domain/errors';
 import { isValidSession } from '../domain/session';
-import { SPACES, type Catalog, type Language, type Session } from '../domain/types';
+import { type Catalog, type Language, type Session } from '../domain/types';
+import { catalogSpaces, normalizeCatalog, validLabels, validRoomId } from '../domain/rooms';
 import { assertCatalogImages } from './images';
 
 const DATABASE_VERSION = 1;
@@ -64,7 +65,7 @@ async function database(): Promise<SQLite.SQLiteDatabase> {
 
 function parsePublished(payload: string | undefined): Catalog {
   try {
-    const catalog: unknown = JSON.parse(payload ?? 'null');
+    const catalog = normalizeCatalog(JSON.parse(payload ?? 'null'));
     if (validateCatalog(catalog).length) throw new Error('Invalid catalog');
     const value = catalog as Catalog;
     if (typeof value.id !== 'string' || !Number.isInteger(value.version) || typeof value.createdAt !== 'string') throw new Error('Invalid header');
@@ -75,10 +76,10 @@ function parsePublished(payload: string | undefined): Catalog {
 }
 
 function parseDraft(payload: string | undefined): Catalog {
-  const value = JSON.parse(payload ?? 'null') as Catalog;
+  const value = normalizeCatalog(JSON.parse(payload ?? 'null')) as Catalog;
   // Incomplete editorial metadata is allowed in drafts. Malformed structures are not.
-  if (!value || !Array.isArray(value.photos) || !Array.isArray(value.terms) ||
-    !value.galleries || SPACES.some((space) => !Array.isArray(value.galleries[space])) ||
+  if (!value || !Array.isArray(value.rooms) || value.rooms.some(room => !room || !validRoomId(room.id) || !validLabels(room.labels)) || new Set(value.rooms.map(room => room.id)).size !== value.rooms.length || !Array.isArray(value.photos) || !Array.isArray(value.terms) ||
+    !value.galleries || catalogSpaces(value).some((space) => !Array.isArray(value.galleries[space])) ||
     value.terms.some((term) => !term || typeof term.id !== 'string' || !term.labels || typeof term.labels.tk !== 'string' || typeof term.labels.ru !== 'string') ||
     value.photos.some((photo) => !photo || typeof photo.id !== 'string' || !photo.image || !Array.isArray(photo.paletteIds) || !Array.isArray(photo.materialIds) || !Array.isArray(photo.detailIds))) {
     throw new AppError('DRAFT_DAMAGED');
@@ -195,7 +196,7 @@ export function publishDraft(): Promise<{ catalog: Catalog; draft: Catalog }> {
     const state = await readState(db);
     const issues = validateCatalog(state.draft);
     if (issues.length) throw new AppError('INVALID_CATALOG', issues.map((issue) => `${issue.subject}: ${issue.labels.tk}`).join('\n'));
-    const selected = new Set(SPACES.flatMap((space) => state.draft.galleries[space]));
+    const selected = new Set(catalogSpaces(state.draft).flatMap((space) => state.draft.galleries[space]));
     const version = state.catalog.version + 1;
     const published: Catalog = {
       ...cloneCatalog(state.draft), id: `catalog-${version}-${Date.now()}`, version, createdAt: new Date().toISOString(),

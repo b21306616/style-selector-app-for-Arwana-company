@@ -53,9 +53,10 @@ test('staff can create a photo directly on the dashboard without opening Excel i
   const save = screen.getByRole('button', { name: 'Сохранить фото в черновик' });
   expect(save).toBeDisabled();
   await fireEvent.press(screen.getByRole('button', { name: 'Выбрать фотографию' }));
-  expect(save).toBeEnabled();
+  expect(save).toBeDisabled();
   await fireEvent.press(screen.getByRole('button', { name: 'Комната' }));
   await fireEvent.press(screen.getByRole('radio', { name: 'Кухня' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Готово' }));
   await fireEvent.press(screen.getByRole('button', { name: 'Сохранить фото в черновик' }));
   expect(app.draft!.photos.at(-1)).toMatchObject({ id: 'new-photo', room: 'kitchen', styleId: '' });
   expect(app.catalog).toEqual(seedCatalog);
@@ -105,30 +106,26 @@ test('searching in either language and dismissing a multi-select sheet retains e
   expect(app.saveDraft).not.toHaveBeenCalled();
 });
 
-test('room changes remove only the previous room collection, and tab switches retain both forms', async () => {
+test('room changes and deselection remove the previous collection while preserving the photo and Whole House', async () => {
   await render(<StaffWorkspaceProvider><Probe /></StaffWorkspaceProvider>);
+  expect(screen.queryByRole('tab')).toBeNull();
+  await fireEvent.press(screen.getByRole('button', { name: 'Комната' }));
+  await fireEvent.press(screen.getByRole('radio', { name: 'Ванная' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Готово' }));
   await fireEvent.press(screen.getByRole('button', { name: 'Выбрать фотографию' }));
   await fireEvent.press(screen.getByRole('checkbox', { name: 'Ванная' }));
   await fireEvent.press(screen.getByRole('checkbox', { name: 'Весь дом' }));
   await fireEvent.press(screen.getByRole('button', { name: 'Комната' }));
   await fireEvent.press(screen.getByRole('radio', { name: 'Кухня' }));
   expect(controller.spaces).toEqual(['whole_house']);
-  await fireEvent.press(screen.getByRole('tab', { name: 'Стиль или тег' }));
-  await fireEvent.changeText(screen.getByLabelText('Русское название'), 'Лён');
-  await fireEvent.changeText(screen.getByLabelText('Türkmençe ady'), 'Zygyr');
-  await fireEvent.press(screen.getByRole('button', { name: 'Категория' }));
-  await fireEvent.press(screen.getByRole('radio', { name: 'Материалы' }));
-  await fireEvent.press(screen.getByRole('tab', { name: 'Фотография' }));
-  expect(screen.getByRole('tab', { name: 'Фотография' })).toBeSelected();
-  expect(screen.getByRole('button', { name: 'Комната' })).toHaveAccessibilityValue({ text: 'Кухня' });
+  expect(screen.getByRole('radio', { name: 'Кухня' })).toBeChecked();
+  await fireEvent.press(screen.getByRole('radio', { name: 'Кухня' }));
+  expect(controller.fields.room).toBe('');
+  await fireEvent(screen.getByTestId('selection-sheet'), 'requestClose');
+  expect(screen.getByRole('button', { name: 'Комната' })).toHaveAccessibilityValue({ text: 'Не выбрано' });
   expect(controller.photo).toEqual(staged);
   expect(screen.getByRole('checkbox', { name: 'Весь дом' })).toBeChecked();
-  await fireEvent.press(screen.getByRole('tab', { name: 'Стиль или тег' }));
-  expect(screen.getByLabelText('Русское название')).toHaveDisplayValue('Лён');
-  await fireEvent.press(screen.getByRole('button', { name: 'Сохранить термин' }));
-  expect(app.draft!.terms.at(-1)).toMatchObject({ kind: 'material', labels: { ru: 'Лён', tk: 'Zygyr' } });
-  expect(controller.fields.materialIds).toEqual([]);
-  expect(controller.photo).toEqual(staged);
+  expect(screen.getByRole('button', { name: 'Сохранить фото в черновик' })).toBeDisabled();
 });
 
 test('a failed term save stays in the sheet, and unfinished labels and choices survive a lock', async () => {
@@ -167,11 +164,12 @@ test('clear confirmation discards only unfinished input and photo feedback is in
   expect(discardPreparedPhotos).toHaveBeenCalledWith([staged]);
   expect(app.draft).toEqual(before);
   await fireEvent.press(screen.getByRole('button', { name: 'Выбрать фотографию' }));
+  await act(async () => { controller.setFields({ ...controller.fields, room: 'kitchen' }); });
   await fireEvent.press(screen.getByRole('button', { name: 'Сохранить фото в черновик' }));
   expect(within(screen.getByTestId('draft-entry-card')).getByText('Фото добавлено в черновик.')).toBeOnTheScreen();
 });
 
-test('busy saves disable tabs and sheet changes until the operation finishes', async () => {
+test('busy saves disable form and sheet changes until the operation finishes', async () => {
   let finish!: () => void;
   jest.mocked(app.saveDraft).mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve; }));
   await render(<StaffWorkspaceProvider><Probe /></StaffWorkspaceProvider>);
@@ -181,7 +179,7 @@ test('busy saves disable tabs and sheet changes until the operation finishes', a
   await fireEvent.changeText(screen.getByLabelText('Türkmençe ady'), 'Täze');
   await fireEvent.press(screen.getByRole('button', { name: 'Сохранить термин' }));
   expect(screen.getByRole('button', { name: 'Закрыть' })).toBeDisabled();
-  expect(screen.getByRole('tab', { name: 'Стиль или тег' })).toBeDisabled();
+  expect(controller.busy).toBe(true);
   await fireEvent(screen.getByTestId('selection-sheet'), 'requestClose');
   expect(screen.getByTestId('selection-sheet')).toBeOnTheScreen();
   await act(async () => { finish(); });
@@ -272,6 +270,7 @@ test('changing viewport and text size preserves the photo while adapting the for
   try {
     const view = await render(<StaffWorkspaceProvider><Probe /></StaffWorkspaceProvider>);
     await fireEvent.press(screen.getByRole('button', { name: 'Surat saýlamak' }));
+    await act(async () => { controller.setFields({ ...controller.fields, room: 'kitchen' }); });
     expect(screen.getByTestId('draft-photo-editor')).toHaveStyle({ flexDirection: 'row' });
     for (const [width, height, fontScale] of [[768, 1024, 1], [390, 844, 1], [320, 568, 2], [1024, 768, 1.5]]) {
       dimensions.mockReturnValue({ width, height, scale: 1, fontScale });
@@ -297,4 +296,118 @@ test('unmounting during a picker cleans up its eventual result without saving it
   await act(async () => { finish(staged); });
   expect(discardPreparedPhotos).toHaveBeenCalledWith([staged]);
   expect(app.saveDraft).not.toHaveBeenCalled();
+});
+
+test('a room can be created without a photo, searched in either language, and deselected', async () => {
+  await render(<StaffWorkspaceProvider><Probe /></StaffWorkspaceProvider>);
+  await fireEvent.press(screen.getByRole('button', { name: 'Комната' }));
+  await fireEvent.press(screen.getByRole('button', { name: '＋ Добавить: Комната' }));
+  expect(screen.getByRole('button', { name: 'Сохранить комнату' })).toBeDisabled();
+  await fireEvent.changeText(screen.getByLabelText('Русское название'), 'Кабинет');
+  expect(screen.getByRole('button', { name: 'Сохранить комнату' })).toBeDisabled();
+  await fireEvent.changeText(screen.getByLabelText('Türkmençe ady'), 'Iş otagy');
+  await fireEvent.press(screen.getByRole('button', { name: 'Сохранить комнату' }));
+  const room = app.draft!.rooms.at(-1)!;
+  expect(controller.fields.room).toBe(room.id);
+  expect(app.draft!.galleries[room.id]).toEqual([]);
+  expect(app.catalog!.rooms).toHaveLength(4);
+  await fireEvent.changeText(screen.getByLabelText('Поиск: Комната'), 'iş otagy');
+  expect(screen.getByRole('radio', { name: 'Кабинет' })).toBeChecked();
+  expect(screen.queryByRole('radio', { name: 'Кухня' })).toBeNull();
+  await fireEvent.press(screen.getByRole('radio', { name: 'Кабинет' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Готово' }));
+  expect(controller.fields.room).toBe('');
+  expect(controller.photo).toBeNull();
+});
+
+test.each(['room', 'style'] as const)('bulk %s deletion preserves search selections and protects used options', async kind => {
+  const unused = [
+    { id: 'unused-1', labels: { ru: 'Первый', tk: 'Birinji' } },
+    { id: 'unused-2', labels: { ru: 'Второй', tk: 'Ikinji' } },
+  ];
+  if (kind === 'room') {
+    app.draft!.rooms.push(...unused);
+    app.draft!.galleries['unused-1'] = []; app.draft!.galleries['unused-2'] = [];
+  } else app.draft!.terms.push(...unused.map(option => ({ ...option, kind: 'style' as const })));
+  await render(<StaffWorkspaceProvider><Probe /></StaffWorkspaceProvider>);
+  const label = kind === 'room' ? 'Комната' : 'Стиль';
+  await fireEvent.press(screen.getByRole('button', { name: label }));
+  expect(screen.queryByRole('button', { name: 'Сбросить выбор' })).toBeNull();
+  await fireEvent.press(screen.getByRole('radio', { name: 'Первый' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Выбрать для удаления' }));
+  expect(screen.getByRole('checkbox', { name: kind === 'room' ? 'Кухня' : 'Минимализм' })).toBeDisabled();
+  await fireEvent.press(within(screen.getByTestId('selection-sheet')).getByRole('checkbox', { name: 'Первый' }));
+  await fireEvent.changeText(screen.getByLabelText(`Поиск: ${label}`), 'Ikinji');
+  await fireEvent.press(screen.getByRole('checkbox', { name: 'Второй' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Удалить (2)' }));
+  expect(screen.getByText('Удалить выбранные записи (2)?')).toBeOnTheScreen();
+  await fireEvent.press(screen.getByRole('button', { name: 'Отмена' }));
+  expect(app.saveDraft).not.toHaveBeenCalled();
+  await fireEvent.press(screen.getByRole('button', { name: 'Удалить (2)' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Удалить (2)' }));
+  expect((kind === 'room' ? app.draft!.rooms : app.draft!.terms).some(item => item.id.startsWith('unused-'))).toBe(false);
+  expect(kind === 'room' ? controller.fields.room : controller.fields.styleId).toBe('');
+  expect(app.draft!.photos).toEqual(seedCatalog.photos);
+});
+
+test('failed deletion keeps the selected room and draft intact for a retry', async () => {
+  app.draft!.rooms.push({ id: 'unused', labels: { ru: 'Кабинет', tk: 'Iş otagy' } });
+  app.draft!.galleries.unused = [];
+  await render(<StaffWorkspaceProvider><Probe /></StaffWorkspaceProvider>);
+  await act(async () => { controller.setFields({ ...controller.fields, room: 'unused' }); });
+  jest.mocked(app.saveDraft).mockRejectedValueOnce(new AppError('STORAGE_FULL'));
+  await fireEvent.press(screen.getByRole('button', { name: 'Комната' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Выбрать для удаления' }));
+  await fireEvent.press(within(screen.getByTestId('selection-sheet')).getByRole('checkbox', { name: 'Кабинет' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Удалить (1)' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Удалить (1)' }));
+  expect(controller.fields.room).toBe('unused');
+  expect(app.draft!.rooms.some(room => room.id === 'unused')).toBe(true);
+  expect(screen.getByRole('alert')).toBeOnTheScreen();
+  await fireEvent.press(screen.getByRole('button', { name: 'Удалить (1)' }));
+  expect(controller.fields.room).toBe('');
+});
+
+test('style selection stays open, replaces the previous style, and toggles off', async () => {
+  await render(<StaffWorkspaceProvider><Probe /></StaffWorkspaceProvider>);
+  await fireEvent.press(screen.getByRole('button', { name: 'Стиль' }));
+  await fireEvent.press(screen.getByRole('radio', { name: 'Минимализм' }));
+  await fireEvent.changeText(screen.getByLabelText('Поиск: Стиль'), 'Skandinaw');
+  await fireEvent.press(screen.getByRole('radio', { name: 'Скандинавский' }));
+  expect(controller.fields.styleId).toBe('scandinavian');
+  await fireEvent.press(screen.getByRole('radio', { name: 'Скандинавский' }));
+  expect(controller.fields.styleId).toBe('');
+  expect(screen.getByTestId('selection-sheet')).toBeOnTheScreen();
+});
+
+test('empty rooms remain manageable and external draft changes clear unavailable form choices', async () => {
+  const view = await render(<StaffWorkspaceProvider><Probe /></StaffWorkspaceProvider>);
+  await act(async () => { controller.setFields({ ...controller.fields, room: 'kitchen', styleId: 'minimalist' }); controller.setSpaces(['kitchen', 'whole_house']); });
+  app.draft = { ...app.draft!, rooms: [], terms: [], photos: [], galleries: { whole_house: [] } };
+  await view.rerender(<StaffWorkspaceProvider><Probe /></StaffWorkspaceProvider>);
+  expect(controller.fields).toMatchObject({ room: '', styleId: '' });
+  expect(controller.spaces).toEqual(['whole_house']);
+  await fireEvent.press(screen.getByRole('button', { name: 'Комната' }));
+  expect(screen.getByText('Пока нет вариантов. Добавьте новый.')).toBeOnTheScreen();
+  expect(screen.getByRole('button', { name: '＋ Добавить: Комната' })).toBeEnabled();
+});
+
+test.each(['ru', 'tk'] as const)('photo errors in %s preserve the previous photo, and removal keeps metadata', async language => {
+  app.language = language;
+  await render(<StaffWorkspaceProvider><Probe /></StaffWorkspaceProvider>);
+  await act(async () => { controller.setFields({ ...controller.fields, room: 'kitchen', styleId: 'minimalist' }); await controller.choosePhoto(); });
+  jest.mocked(pickDraftPhoto).mockResolvedValueOnce(null);
+  await act(async () => { await controller.choosePhoto(); });
+  expect(controller.photo).toEqual(staged);
+  jest.mocked(pickDraftPhoto).mockRejectedValueOnce(new AppError('DRAFT_PHOTO_TOO_LARGE'));
+  await act(async () => { await controller.choosePhoto(); });
+  expect(screen.getByText(language === 'ru' ? 'Размер выбранного фото не должен превышать 10 МБ.' : 'Saýlanan suratyň ölçegi 10 MB-dan geçmeli däl.')).toBeOnTheScreen();
+  expect(controller.photo).toEqual(staged);
+  expect(discardPreparedPhotos).not.toHaveBeenCalled();
+  await fireEvent.press(screen.getByRole('button', { name: language === 'ru' ? 'Удалить фото' : 'Suraty aýyrmak' }));
+  expect(controller.photo).toBeNull();
+  expect(controller.fields).toMatchObject({ room: 'kitchen', styleId: 'minimalist' });
+  expect(discardPreparedPhotos).toHaveBeenCalledWith([staged]);
+  await act(async () => { await controller.choosePhoto(); });
+  expect(controller.photo).toEqual(staged);
 });

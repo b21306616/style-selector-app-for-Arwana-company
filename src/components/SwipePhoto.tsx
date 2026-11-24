@@ -75,7 +75,9 @@ export function SwipePhoto({ photo, nextPhoto, language, enabled, onChoice, onRe
     onUpdate: (event) => {
       'worklet';
       if (!isCommitted.value && !entering.value) {
+        // eslint-disable-next-line react-hooks/immutability -- Reanimated shared values mutate only in this UI worklet.
         x.value = event.translationX;
+        // eslint-disable-next-line react-hooks/immutability -- Reanimated shared values mutate only in this UI worklet.
         y.value = event.translationY * 0.18;
       }
     },
@@ -92,9 +94,11 @@ export function SwipePhoto({ photo, nextPhoto, language, enabled, onChoice, onRe
         const targetY = Math.max(-150, Math.min(150, event.translationY * 0.35 + (event.velocityY * 0.04)));
 
         if (reduceMotion) {
+          // eslint-disable-next-line react-hooks/immutability -- Reanimated shared values mutate only in this UI worklet.
           x.value = targetX;
           scheduleOnRN(onChoice, choice);
         } else {
+          // eslint-disable-next-line react-hooks/immutability -- Reanimated shared values mutate only in this UI worklet.
           y.value = withTiming(targetY, { duration: 240, easing: Easing.out(Easing.quad) });
           x.value = withTiming(
             targetX,
@@ -121,7 +125,9 @@ export function SwipePhoto({ photo, nextPhoto, language, enabled, onChoice, onRe
       'worklet';
       if (!isCommitted.value && !entering.value) {
         if (reduceMotion) {
+          // eslint-disable-next-line react-hooks/immutability -- Reanimated shared values mutate only in this UI worklet.
           x.value = 0;
+          // eslint-disable-next-line react-hooks/immutability -- Reanimated shared values mutate only in this UI worklet.
           y.value = 0;
         } else {
           x.value = withSpring(0, { damping: 18, stiffness: 220 });

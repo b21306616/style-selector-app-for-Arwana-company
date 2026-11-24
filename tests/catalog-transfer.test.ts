@@ -2,6 +2,7 @@ import { expect, test } from '@jest/globals';
 import * as XLSX from 'xlsx';
 import { strToU8, zipSync } from 'fflate';
 import { seedCatalog } from '../src/data/catalog';
+import { defaultRooms } from '../src/domain/rooms';
 import { cloneCatalog } from '../src/domain/catalog';
 import { addDraftPhoto, addDraftTerm, filenameKey, previewImport, type CatalogWorkbook } from '../src/domain/catalog-transfer';
 import { readZipIndex } from '../src/domain/zip';
@@ -96,9 +97,9 @@ test('parser reports formula cells, duplicate IDs, unsupported rooms and repeate
   expect(workbook.issues).toEqual(expect.arrayContaining([
     expect.objectContaining({ sheet: 'Terms', row: 3 }),
     expect.objectContaining({ sheet: 'Photos', row: 2, column: 'style_id' }),
-    expect.objectContaining({ sheet: 'Photos', row: 3, column: 'room' }),
     expect.objectContaining({ sheet: 'Galleries', row: 3 }),
   ]));
+  expect(previewImport(seedCatalog, workbook, new Map(), 'merge').issues).toContainEqual(expect.objectContaining({ sheet: 'Photos', row: 3, column: 'room' }));
 });
 
 test('unknown references block import while incomplete tagging is only a publication warning', () => {
@@ -114,7 +115,41 @@ test('unknown references block import while incomplete tagging is only a publica
 
 test('the empty template is valid and guide examples are never imported', () => {
   const workbook = decodeWorkbook(encodeWorkbook());
-  expect(workbook).toEqual({ terms: [], photos: [], galleries: [], issues: [] });
+  expect(workbook).toEqual({ rooms: defaultRooms.map((value, index) => ({ row: index + 2, value })), terms: [], photos: [], galleries: [], issues: [] });
+});
+
+test('custom rooms round trip with their labels and gallery membership in workbook v2', () => {
+  const catalog = empty();
+  catalog.rooms = [{ id: 'office', labels: { ru: 'Кабинет', tk: 'Iş otagy' } }];
+  catalog.terms = seedCatalog.terms;
+  catalog.photos = [{ ...seedCatalog.photos[0], room: 'office' }];
+  catalog.galleries = { whole_house: [], office: [catalog.photos[0].id] };
+  const workbook = decodeWorkbook(encodeWorkbook(catalog));
+  const restored = previewImport(empty(), workbook, imageMap(catalog), 'replace');
+  expect(restored.issues).toEqual([]);
+  expect(restored.catalog.rooms).toEqual(catalog.rooms);
+  expect(restored.catalog.galleries).toEqual(catalog.galleries);
+  expect(restored.warnings).toBe(0);
+  const merged = previewImport(seedCatalog, workbook, imageMap(catalog), 'merge');
+  expect(merged.catalog.rooms).toHaveLength(5);
+});
+
+test('version 1 workbooks retain the original room definitions', () => {
+  const workbook = decodeWorkbook(editWorkbook(book => {
+    book.Sheets.Metadata.B2.v = '1';
+    delete book.Sheets.Rooms;
+    book.SheetNames = book.SheetNames.filter(name => name !== 'Rooms');
+  }));
+  expect(workbook.rooms.map(row => row.value)).toEqual(defaultRooms);
+  expect(previewImport(empty(), workbook, imageMap(seedCatalog), 'replace').issues).toEqual([]);
+});
+
+test('explicitly empty room lists and unknown references are handled during import', () => {
+  const catalog = { ...empty(), rooms: [], galleries: { whole_house: [] } };
+  const workbook = decodeWorkbook(encodeWorkbook(catalog));
+  expect(previewImport(seedCatalog, workbook, new Map(), 'replace').catalog.rooms).toEqual([]);
+  workbook.photos = decodeWorkbook(encodeWorkbook(seedCatalog)).photos.slice(0, 1);
+  expect(previewImport(seedCatalog, workbook, new Map(), 'replace').issues).toContainEqual(expect.objectContaining({ column: 'room' }));
 });
 
 test('rejects truncated archives, unsafe paths, excessive expansion and unsupported format versions', () => {
@@ -123,7 +158,7 @@ test('rejects truncated archives, unsafe paths, excessive expansion and unsuppor
   expect(() => readZipIndex(unsafe.length, (offset, length) => unsafe.subarray(offset, offset + length), 1000)).toThrow('INVALID_ARCHIVE');
   const large = zipSync({ 'photo.jpg': new Uint8Array(2000) });
   expect(() => readZipIndex(large.length, (offset, length) => large.subarray(offset, offset + length), 1000)).toThrow('TRANSFER_LIMIT');
-  expect(() => decodeWorkbook(editWorkbook(book => { book.Sheets.Metadata.B2.v = '2'; }))).toThrow('INVALID_WORKBOOK');
+  expect(() => decodeWorkbook(editWorkbook(book => { book.Sheets.Metadata.B2.v = '3'; }))).toThrow('INVALID_WORKBOOK');
 });
 
 test('500-photo workbook round trip preserves every record and gallery position', () => {

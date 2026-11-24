@@ -8,6 +8,11 @@ export class AppError extends Error {
 }
 
 const messages: Record<string, Record<Language, string>> = {
+  DUPLICATE_ROOM: { tk: 'Şeýle atly otag eýýäm bar.', ru: 'Комната с таким названием уже существует.' },
+  REFERENCED_ROOM: { tk: 'Otagy öçürmezden ozal, baglanyşykly suratlarda ony çalyşyň.', ru: 'Прежде чем удалить комнату, замените её у связанных фотографий.' },
+  ROOM_REQUIRED: { tk: 'Suraty ýatda saklamak üçin otagy saýlaň.', ru: 'Выберите комнату, чтобы сохранить фото.' },
+  DRAFT_PHOTO_TOO_LARGE: { tk: 'Saýlanan suratyň ölçegi 10 MB-dan geçmeli däl.', ru: 'Размер выбранного фото не должен превышать 10 МБ.' },
+  IMAGE_SIZE_UNAVAILABLE: { tk: 'Suratyň ölçegini barlap bolmady. Başga surat saýlaň.', ru: 'Не удалось проверить размер фото. Выберите другое изображение.' },
   DUPLICATE_TERM: { tk: 'Bu kategoriýada şeýle atly termin eýýäm bar.', ru: 'Термин с таким названием уже есть в этой категории.' },
   INVALID_WORKBOOK: { tk: 'Excel faýly okalmady. Programmanyň .xlsx şablonyny ulanyň.', ru: 'Не удалось прочитать Excel. Используйте шаблон .xlsx из приложения.' },
   INVALID_ARCHIVE: { tk: 'ZIP nädogry, zaýalanan ýa-da goldanylmaýar.', ru: 'ZIP повреждён, содержит небезопасные пути или не поддерживается.' },

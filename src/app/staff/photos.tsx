@@ -6,7 +6,8 @@ import { PhotoTile } from '../../components/PhotoTile';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { AppModal } from '../../components/AppModal';
 import { useApp } from '../../state/AppProvider';
-import { Photo, ROOMS, Room, SPACES } from '../../domain/types';
+import { Photo, Room } from '../../domain/types';
+import { catalogSpaces, hasRoom } from '../../domain/rooms';
 import { importPhotos } from '../../storage/images';
 import { messageForError } from '../../domain/errors';
 import { StaffList, staffStyles as s } from '../../features/staff/shared';
@@ -15,7 +16,8 @@ import { PhotoMetadataFields } from '../../features/staff/EntryFields';
 export default function StaffPhotos() {
   const { draft, language, saveDraft, busy } = useApp();
   const { contentWidth, tablet, wide, columns } = useLayout();
-  const [room, setRoom] = useState<Room | 'all'>('all');
+  const [requestedRoom, setRoom] = useState<Room | 'all'>('all');
+  const room = draft && hasRoom(draft, requestedRoom) ? requestedRoom : 'all';
   const [search, setSearch] = useState('');
   const [editing, setEditing] = useState<Photo | null>(null);
   const [discard, setDiscard] = useState(false);
@@ -28,13 +30,14 @@ export default function StaffPhotos() {
     if (!draft) return [];
     const termMap = new Map(draft.terms.map(term => [term.id, `${term.labels.tk} ${term.labels.ru}`]));
     const query = search.trim().toLocaleLowerCase();
-    return draft.photos.filter(photo => (room === 'all' || photo.room === room) && (!query || [spaceLabel(photo.room, language), photo.id, ...[photo.styleId, ...photo.paletteIds, ...photo.materialIds, ...photo.detailIds].map(id => termMap.get(id) ?? '')].join(' ').toLocaleLowerCase().includes(query)));
+    return draft.photos.filter(photo => (room === 'all' || photo.room === room) && (!query || [spaceLabel(photo.room, language, draft.rooms), photo.id, ...[photo.styleId, ...photo.paletteIds, ...photo.materialIds, ...photo.detailIds].map(id => termMap.get(id) ?? '')].join(' ').toLocaleLowerCase().includes(query)));
   }, [draft, room, search, language]);
   if (!draft) return null;
   const dirty = editing && JSON.stringify(editing) !== JSON.stringify(draft.photos.find(photo => photo.id === editing.id));
   function close() { if (dirty) setDiscard(true); else { setEditing(null); setError(null); } }
   async function save() {
     if (!draft || !editing) return;
+    if (!hasRoom(draft, editing.room)) { setError(t('Otagy saýlaň.', 'Выберите комнату.')); return; }
     setError(null);
     try {
       const original = draft.photos.find(photo => photo.id === editing.id)!;
@@ -48,16 +51,16 @@ export default function StaffPhotos() {
     if (!draft || !editing) return;
     try {
       const galleries = { ...draft.galleries };
-      for (const space of SPACES) galleries[space] = galleries[space].filter(id => id !== editing.id);
+      for (const space of catalogSpaces(draft)) galleries[space] = galleries[space].filter(id => id !== editing.id);
       await saveDraft({ ...draft, photos: draft.photos.filter(photo => photo.id !== editing.id), galleries });
       setEditing(null); setDeleting(false);
     } catch (e) { setError(messageForError(e, language)); setDeleting(false); }
   }
   async function addPhotos() {
-    if (!draft || importing || busy) return;
+    if (!draft || importing || busy || !draft.rooms.length) return;
     setError(null); setImporting(true); setProgress('');
     try {
-      const imported = await importPhotos(room === 'all' ? 'bathroom' : room, (done, total) => setProgress(`${done} / ${total}`));
+      const imported = await importPhotos(hasRoom(draft, room) ? room : draft.rooms[0].id, (done, total) => setProgress(`${done} / ${total}`));
       if (imported.length) {
         await saveDraft(current => ({ ...current, photos: [...current.photos, ...imported] }));
         setEditing(imported[0]);
@@ -67,14 +70,15 @@ export default function StaffPhotos() {
   }
   return <>
     <StaffList title={t('Suratlar', 'Библиотека фотографий')} key={columns} data={items} numColumns={columns} keyExtractor={photo => photo.id} initialNumToRender={8} maxToRenderPerBatch={8} windowSize={5} columnWrapperStyle={columns > 1 ? { gap: 12 } : undefined} contentContainerStyle={{ gap: 16, paddingBottom: 24 }} header={<View style={s.section}>
-        <Button title={importing ? `${t('Suratlar taýýarlanýar', 'Подготовка фотографий')} ${progress}` : t('＋ Surat goşmak', '＋ Добавить фотографии')} onPress={() => void addPhotos()} loading={importing} disabled={busy} />
+        <Button title={importing ? `${t('Suratlar taýýarlanýar', 'Подготовка фотографий')} ${progress}` : t('＋ Surat goşmak', '＋ Добавить фотографии')} onPress={() => void addPhotos()} loading={importing} disabled={busy || !draft.rooms.length} />
+        {!draft.rooms.length && <Text style={typography.small}>{t('Ilki garalama formasynda otag goşuň.', 'Сначала добавьте комнату в форме черновика.')}</Text>}
         <TextField label={t('Surat gözlegi', 'Поиск фотографий')} value={search} onChangeText={setSearch} placeholder={t('Otag, stil ýa-da aýratynlyk', 'Комната, стиль или особенность')} />
-        <View style={s.row}><Chip label={t('Ähli otaglar', 'Все комнаты')} selected={room === 'all'} onPress={() => setRoom('all')} />{ROOMS.map(value => <Chip key={value} label={spaceLabel(value, language)} selected={room === value} onPress={() => setRoom(value)} />)}</View>
+        <View style={s.row}><Chip label={t('Ähli otaglar', 'Все комнаты')} selected={room === 'all'} onPress={() => setRoom('all')} />{draft.rooms.map(({ id: value }) => <Chip key={value} label={spaceLabel(value, language, draft.rooms)} selected={room === value} onPress={() => setRoom(value)} />)}</View>
         {error && !editing && <ErrorBanner message={error} />}
       </View>} ListEmptyComponent={<Text style={typography.body}>{t('Gabat gelýän surat ýok. Başlamak üçin birnäçe surat goşuň.', 'Подходящих фотографий нет. Добавьте первые изображения.')}</Text>} renderItem={({ item }) => {
         const style = draft.terms.find(term => term.id === item.styleId);
         const complete = style && item.paletteIds.length && item.materialIds.length && item.detailIds.length;
-        return <PhotoTile photo={item} language={language} title={spaceLabel(item.room, language)} subtitle={complete ? style.labels[language] : undefined} badge={complete ? undefined : t('Tegler gerek', 'Нужны теги')} label={spaceLabel(item.room, language) + ', ' + (style?.labels[language] ?? t('Tegler gerek', 'Нужны теги'))}
+        return <PhotoTile photo={item} language={language} title={spaceLabel(item.room, language, draft.rooms)} subtitle={complete ? style.labels[language] : undefined} badge={complete ? undefined : t('Tegler gerek', 'Нужны теги')} label={spaceLabel(item.room, language, draft.rooms) + ', ' + (style?.labels[language] ?? t('Tegler gerek', 'Нужны теги'))}
           onPress={() => { setEditing({ ...item, paletteIds: [...item.paletteIds], materialIds: [...item.materialIds], detailIds: [...item.detailIds] }); setError(null); }}
           style={{ width: (contentWidth - (columns - 1) * 12) / columns }} />;
       }} />
@@ -83,7 +87,7 @@ export default function StaffPhotos() {
         <View style={{ flexDirection: wide ? 'row' : 'column', gap: 20, alignItems: 'flex-start' }}>
         <PhotoImage key={editing.id} photo={editing} language={language} fit="contain" style={{ width: wide ? '46%' : '100%', height: Math.min(tablet ? 400 : 300, contentWidth * editing.height / editing.width), borderRadius: 18 }} />
         <View style={{ flex: 1, width: wide ? undefined : '100%', gap: 16 }}>
-        <PhotoMetadataFields value={editing} terms={draft.terms} language={language} onChange={value => setEditing({ ...editing, ...value })} disabled={busy} />
+        <PhotoMetadataFields value={editing} terms={draft.terms} rooms={draft.rooms} language={language} onChange={value => setEditing({ ...editing, ...value })} disabled={busy} />
         <Text style={typography.small}>{t('Talap edilýär: bir stil we her kategoriýadan azyndan bir teg. Otagy üýtgetmek bu suraty öňki otag toplumyndan aýyrýar.', 'Нужен один стиль и хотя бы один тег каждой категории. При смене комнаты фото удалится из прежней комнатной подборки.')}</Text>
         {error && <ErrorBanner message={error} />}
         <Button title={t('Suraty ýatda sakla', 'Сохранить фотографию')} onPress={() => void save()} loading={busy} />

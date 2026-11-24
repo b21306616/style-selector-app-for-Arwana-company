@@ -1,9 +1,11 @@
 export type Language = 'ru' | 'tk';
 export type Labels = Record<Language, string>;
 export const ROOMS = ['bathroom', 'bedroom', 'living_room', 'kitchen'] as const;
-export type Room = (typeof ROOMS)[number];
+/** Room IDs are catalog data; ROOMS is only the legacy/seed list. */
+export type Room = string;
 export type Space = Room | 'whole_house';
 export const SPACES: Space[] = ['whole_house', ...ROOMS];
+export interface RoomDefinition { id: Room; labels: Labels }
 export type TermKind = 'style' | 'palette' | 'material' | 'detail';
 export interface Term { id: string; kind: TermKind; labels: Labels }
 export type ImageRef = { kind: 'bundled'; key: string } | { kind: 'local'; file: string; thumbnail: string };
@@ -23,6 +25,7 @@ export interface Catalog {
   id: string;
   version: number;
   createdAt: string;
+  rooms: RoomDefinition[];
   terms: Term[];
   photos: Photo[];
   galleries: Record<Space, string[]>;

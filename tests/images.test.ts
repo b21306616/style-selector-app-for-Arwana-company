@@ -10,7 +10,7 @@ const mockDirectories = new Set<string>();
 const mockDimensions = new Map<string, { width: number; height: number }>();
 const mockManipulations: { source: string; maxWidth: number; maxHeight: number; contextReleased: boolean; imageReleased: boolean }[] = [];
 const mockPaths = { document: '/document', availableDiskSpace: 1_000_000_000 };
-const mockPick = jest.fn<() => Promise<PickerResult>>();
+const mockPick = jest.fn<(options?: unknown) => Promise<PickerResult>>();
 let mockNow = 1_800_000_000_000;
 let mockUuid = 0;
 let mockCopies = 0;
@@ -25,6 +25,7 @@ jest.mock('expo-file-system', () => {
     constructor(...parts: (string | { uri: string })[]) { this.uri = mockJoin(parts); }
     get name() { return this.uri.split('/').at(-1)!; }
     get exists() { return mockFiles.has(this.uri); }
+    get size() { return mockFiles.get(this.uri)?.size ?? 0; }
     get lastModified() { return mockFiles.get(this.uri)?.lastModified ?? 0; }
     copy(target: File) {
       const source = mockFiles.get(this.uri);
@@ -45,7 +46,7 @@ jest.mock('expo-file-system', () => {
   return { File, Directory, Paths: mockPaths };
 });
 jest.mock('expo-crypto', () => ({ randomUUID: () => `photo-${++mockUuid}` }));
-jest.mock('expo-image-picker', () => ({ launchImageLibraryAsync: () => mockPick() }));
+jest.mock('expo-image-picker', () => ({ launchImageLibraryAsync: mockPick, UIImagePickerPreferredAssetRepresentationMode: { Current: 'current' } }));
 jest.mock('../src/data/bundled-images', () => ({ bundledImages: { sample: 1 }, bundledThumbnails: { sample: 2 } }), { virtual: true });
 jest.mock('expo-image-manipulator', () => ({
   SaveFormat: { JPEG: 'jpeg' },
@@ -98,6 +99,41 @@ beforeEach(() => {
 afterEach(() => { jest.restoreAllMocks(); });
 
 describe('offline photo importing', () => {
+  test.each([10 * 1024 * 1024 - 1, 10 * 1024 * 1024])('the draft picker accepts %i bytes and requests one original image', async bytes => {
+    mockPick.mockResolvedValue({ canceled: false, assets: [{ ...asset('draft'), fileSize: bytes }] });
+    const photo = await images.pickDraftPhoto('');
+    expect(photo?.image.kind).toBe('local');
+    expect(mockPick).toHaveBeenCalledWith(expect.objectContaining({ allowsMultipleSelection: false, allowsEditing: false, mediaTypes: ['images'], quality: 1 }));
+  });
+
+  test('an oversized draft photo is rejected before any decoding or app-owned copies', async () => {
+    mockPick.mockResolvedValue({ canceled: false, assets: [{ ...asset('large'), fileSize: images.DRAFT_PHOTO_MAX_BYTES + 1 }] });
+    await expect(images.pickDraftPhoto('kitchen')).rejects.toThrow('DRAFT_PHOTO_TOO_LARGE');
+    expect(mockManipulations).toHaveLength(0);
+    expect(appFiles()).toEqual([]);
+    // The separate library importer keeps its existing larger limit.
+    await expect(images.importPhotos('kitchen')).resolves.toHaveLength(1);
+  });
+
+  test('missing size metadata falls back to the file size and never accepts an unreadable size', async () => {
+    const original = asset('size');
+    delete original.fileSize;
+    mockFiles.set(original.uri, { lastModified: mockNow, size: images.DRAFT_PHOTO_MAX_BYTES + 1 });
+    mockPick.mockResolvedValue({ canceled: false, assets: [original] });
+    await expect(images.pickDraftPhoto('kitchen')).rejects.toThrow('DRAFT_PHOTO_TOO_LARGE');
+    mockFiles.delete(original.uri);
+    await expect(images.pickDraftPhoto('kitchen')).rejects.toThrow('IMAGE_SIZE_UNAVAILABLE');
+    expect(mockManipulations).toHaveLength(0);
+    mockFiles.set(original.uri, { lastModified: mockNow, size: images.DRAFT_PHOTO_MAX_BYTES });
+    await expect(images.pickDraftPhoto('kitchen')).resolves.toMatchObject({ room: 'kitchen' });
+  });
+
+  test('canceling the draft picker does not create files', async () => {
+    mockPick.mockResolvedValue({ canceled: true, assets: null });
+    await expect(images.pickDraftPhoto('')).resolves.toBeNull();
+    expect(appFiles()).toEqual([]);
+  });
+
   test('cancellation leaves storage untouched and releases the import guard', async () => {
     mockPick.mockResolvedValue({ canceled: true, assets: null });
     await expect(images.importPhotos()).resolves.toEqual([]);

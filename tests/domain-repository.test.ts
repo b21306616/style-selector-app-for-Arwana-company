@@ -1,6 +1,6 @@
 /// <reference types="node" />
 import { afterEach, beforeEach, expect, jest, test } from '@jest/globals';
-import { cloneCatalog } from '../src/domain/catalog';
+import { addDraftRoom, cloneCatalog, removeDraftOptions } from '../src/domain/catalog';
 import { createSession, rateSession } from '../src/domain/session';
 
 // Exercise the actual SQL and rollback behavior without a simulator/native bridge.
@@ -57,6 +57,49 @@ test('initialization seeds once and persists language, session order, and undo a
   expect(resumed.session?.catalog.id).toBe(initial.catalog.id);
   const savedPayload = sqlite.__database.prepare('SELECT payload FROM active_session').get() as { payload: string };
   expect(JSON.parse(savedPayload.payload)).not.toHaveProperty('catalog');
+});
+
+test('legacy room definitions are supplied when reading published, draft, and session snapshots', async () => {
+  const initial = await repository.loadState();
+  await repository.saveSession(createSession(initial.catalog, 'kitchen', 'legacy'));
+  const { rooms: _rooms, ...legacy } = initial.catalog;
+  sqlite.__database.prepare('UPDATE catalog_revisions SET payload = ?').run(JSON.stringify(legacy));
+  sqlite.__database.prepare('UPDATE catalog_draft SET payload = ?').run(JSON.stringify(legacy));
+  const resumed = await repository.loadState();
+  expect(resumed.catalog.rooms).toEqual(initial.catalog.rooms);
+  expect(resumed.draft.rooms).toEqual(initial.draft.rooms);
+  expect(resumed.session?.catalog.rooms).toEqual(initial.catalog.rooms);
+  expect(resumed.notices).toEqual([]);
+});
+
+test('custom rooms persist and publish while existing sessions retain their original labels and rooms', async () => {
+  const initial = await repository.loadState();
+  await repository.saveSession(createSession(initial.catalog, 'kitchen', 'original'));
+  const room = { id: 'office', labels: { ru: 'Кабинет', tk: 'Iş otagy' } };
+  const draft = addDraftRoom(initial.draft, room);
+  draft.photos.push({ ...draft.photos[0], id: 'office-photo', room: room.id });
+  draft.galleries.office.push('office-photo');
+  await repository.saveDraft(draft);
+  expect((await repository.loadState()).draft.rooms).toContainEqual(room);
+  expect((await repository.loadState()).catalog.rooms).not.toContainEqual(room);
+  const published = await repository.publishDraft();
+  expect(published.catalog.photos.find(photo => photo.id === 'office-photo')?.room).toBe('office');
+  const resumed = await repository.loadState();
+  expect(resumed.catalog.rooms).toContainEqual(room);
+  expect(resumed.session?.catalog.rooms).not.toContainEqual(room);
+});
+
+test('deleting all unused rooms survives save, publication, restart reads, and draft reset', async () => {
+  const initial = await repository.loadState();
+  const draft = cloneCatalog(initial.draft);
+  draft.photos = [];
+  for (const id of Object.keys(draft.galleries)) draft.galleries[id] = [];
+  const empty = removeDraftOptions(draft, 'room', draft.rooms.map(room => room.id));
+  await repository.saveDraft(empty);
+  expect((await repository.loadState()).draft.rooms).toEqual([]);
+  await repository.publishDraft();
+  expect((await repository.loadState()).catalog.rooms).toEqual([]);
+  expect((await repository.resetDraft()).rooms).toEqual([]);
 });
 
 test('publishing revisions cannot change an active session or release its photo references', async () => {

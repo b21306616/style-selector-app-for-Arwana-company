@@ -7,6 +7,7 @@ import { AppError, errorCode } from '../domain/errors';
 import { Catalog, Photo, Room } from '../domain/types';
 
 let importing = false;
+export const DRAFT_PHOTO_MAX_BYTES = 10 * 1024 * 1024;
 const directory = () => new Directory(Paths.document, 'arwana-images');
 const safeName = (name: string) => /^[a-zA-Z0-9_-]+\.jpg$/.test(name);
 
@@ -94,8 +95,17 @@ export async function importPhotos(room: Room = 'bathroom', onProgress?: (done: 
 
 export async function pickDraftPhoto(room: Room): Promise<Photo | null> {
   const photos = await processPhotoSelection(async () => {
-    const selection = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: false, quality: 1, exif: false, base64: false });
-    return selection.canceled ? [] : selection.assets.slice(0, 1);
+    const selection = await ImagePicker.launchImageLibraryAsync({ mediaTypes: ['images'], allowsMultipleSelection: false, allowsEditing: false, quality: 1, exif: false, base64: false,
+      preferredAssetRepresentationMode: ImagePicker.UIImagePickerPreferredAssetRepresentationMode.Current });
+    if (selection.canceled || !selection.assets.length) return [];
+    const asset = selection.assets[0];
+    let size = asset.fileSize;
+    if (size === undefined || !Number.isFinite(size) || size <= 0) {
+      try { size = new File(asset.uri).size; } catch { throw new AppError('IMAGE_SIZE_UNAVAILABLE'); }
+    }
+    if (!Number.isFinite(size) || size <= 0) throw new AppError('IMAGE_SIZE_UNAVAILABLE');
+    if (size > DRAFT_PHOTO_MAX_BYTES) throw new AppError('DRAFT_PHOTO_TOO_LARGE');
+    return [asset];
   }, room);
   return photos[0] ?? null;
 }

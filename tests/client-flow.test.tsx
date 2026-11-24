@@ -5,6 +5,7 @@ import GalleryScreen from '../src/app/gallery';
 import HomeScreen from '../src/app/index';
 import ResultScreen from '../src/app/result';
 import { seedCatalog } from '../src/data/catalog';
+import { addDraftRoom } from '../src/domain/catalog';
 import type { Session } from '../src/domain/types';
 import { useApp, type AppContextValue } from '../src/state/AppProvider';
 
@@ -52,6 +53,20 @@ beforeEach(() => {
     saveDraft: asyncMock(), publishDraft: asyncMock(), resetDraft: asyncMock(), refresh: asyncMock(), dismissNotices: jest.fn(),
   };
   jest.mocked(useApp).mockImplementation(() => app);
+});
+
+test('custom spaces become customer choices only in the published catalog', async () => {
+  const room = { id: 'office', labels: { ru: 'Кабинет', tk: 'Iş otagy' } };
+  app.draft = addDraftRoom(seedCatalog, room);
+  app.draft.photos = [...app.draft.photos, { ...seedCatalog.photos[0], id: 'office-photo', room: room.id }];
+  app.draft.galleries.office = ['office-photo'];
+  app.session = null;
+  const view = await render(<HomeScreen />);
+  expect(screen.queryByRole('button', { name: 'Iş otagy, 1 surat' })).toBeNull();
+  app.catalog = app.draft;
+  await view.rerender(<HomeScreen />);
+  await fireEvent.press(screen.getByRole('button', { name: 'Iş otagy, 1 surat' }));
+  expect(app.startSession).toHaveBeenCalledWith('office');
 });
 
 test('gallery hides style metadata and only accepts one rating after the image loads', async () => {

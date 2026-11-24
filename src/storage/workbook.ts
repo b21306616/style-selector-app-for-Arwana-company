@@ -4,8 +4,10 @@ import { AppError } from '../domain/errors';
 import { TRANSFER_LIMITS, transferIssue, validFilename, type CatalogWorkbook, type TransferIssue } from '../domain/catalog-transfer';
 import { readZipIndex, updateCrc } from '../domain/zip';
 import { ROOMS, SPACES, type Catalog, type Room, type Space, type TermKind } from '../domain/types';
+import { catalogSpaces, defaultRooms, validRoomId } from '../domain/rooms';
 
 const headers = {
+  Rooms: ['id', 'ru', 'tk'],
   Terms: ['id', 'kind', 'ru', 'tk'],
   Photos: ['id', 'image_filename', 'room', 'style_id', 'palette_ids', 'material_ids', 'detail_ids', 'sample'],
   Galleries: ['space', 'photo_id', 'position'],
@@ -51,7 +53,8 @@ export function decodeWorkbook(bytes: Uint8Array): CatalogWorkbook {
   const issues: TransferIssue[] = [];
   const problem = (sheet: string, row: number, column: string, ru: string, tk: string) => issues.push(transferIssue(sheet, row, ru, tk, column));
   const metadata = book.Sheets.Metadata;
-  if (!metadata || metadata.A2?.v !== 'format_version' || String(metadata.B2?.v) !== '1') throw new AppError('INVALID_WORKBOOK');
+  const version = String(metadata?.B2?.v);
+  if (!metadata || metadata.A2?.v !== 'format_version' || !['1', '2'].includes(version)) throw new AppError('INVALID_WORKBOOK');
   function rows(sheet: keyof typeof headers, limit: number): { row: number; values: Record<string, string> }[] {
     const source = book.Sheets[sheet];
     if (!source) { problem(sheet, 1, '', 'Отсутствует обязательный лист.', 'Hökmany sahypa ýok.'); return []; }
@@ -81,6 +84,11 @@ export function decodeWorkbook(bytes: Uint8Array): CatalogWorkbook {
     if ((!optional || value) && !validId(value)) problem(sheet, row, column, 'Нужен текстовый ID без точки с запятой (до 120 символов).', 'Nokatly otursyz tekst ID gerek (120 nyşana çenli).');
     return value;
   };
+  const rooms = version === '1' ? defaultRooms.map(room => ({ row: 0, value: { ...room, labels: { ...room.labels } } })) : rows('Rooms', TRANSFER_LIMITS.terms).map(({ row, values: v }) => {
+    if (!validRoomId(v.id)) problem('Rooms', row, 'id', 'Нужен уникальный ID комнаты: буквы A–Z, цифры, дефис или подчёркивание.', 'Otagyň ID-si üçin A–Z harplaryny, sanlary, defisi ýa-da aşaky çyzygy ulanyň.');
+    for (const language of ['ru', 'tk']) if (!v[language] || v[language].length > 100) problem('Rooms', row, language, 'Введите название (1–100 символов).', 'Ady giriziň (1–100 nyşan).');
+    return { row, value: { id: v.id, labels: { ru: v.ru, tk: v.tk } } };
+  });
   const terms = rows('Terms', TRANSFER_LIMITS.terms).map(({ row, values: v }) => {
     ids('Terms', row, 'id', v.id);
     if (!kinds.includes(v.kind as TermKind)) problem('Terms', row, 'kind', 'Категория: style, palette, material или detail.', 'Kategoriýa: style, palette, material ýa-da detail.');
@@ -90,7 +98,7 @@ export function decodeWorkbook(bytes: Uint8Array): CatalogWorkbook {
   const photos = rows('Photos', TRANSFER_LIMITS.photos).map(({ row, values: v }) => {
     ids('Photos', row, 'id', v.id);
     ids('Photos', row, 'style_id', v.style_id, true);
-    if (!ROOMS.includes(v.room as Room)) problem('Photos', row, 'room', 'Неизвестная комната; см. Guide.', 'Otag näbelli; Guide sahypasyna serediň.');
+    if (version === '1' ? !(ROOMS as readonly string[]).includes(v.room) : !validRoomId(v.room)) problem('Photos', row, 'room', 'Неизвестная комната; см. Rooms и Guide.', 'Otag näbelli; Rooms we Guide sahypalaryna serediň.');
     if (v.image_filename && !validFilename(v.image_filename)) problem('Photos', row, 'image_filename', 'Нужно имя изображения без пути.', 'Suratyň ýolsyz faýl ady gerek.');
     if (!['true', 'false', ''].includes(v.sample.toLowerCase())) problem('Photos', row, 'sample', 'Используйте TRUE или FALSE.', 'TRUE ýa-da FALSE ulanyň.');
     const tags = (column: string) => {
@@ -100,8 +108,8 @@ export function decodeWorkbook(bytes: Uint8Array): CatalogWorkbook {
     };
     return { row, value: { id: v.id, filename: v.image_filename, room: v.room as Room, styleId: v.style_id, paletteIds: tags('palette_ids'), materialIds: tags('material_ids'), detailIds: tags('detail_ids'), sample: v.sample.toLowerCase() === 'true' } };
   });
-  const galleries = rows('Galleries', TRANSFER_LIMITS.photos * SPACES.length).map(({ row, values: v }) => {
-    if (!SPACES.includes(v.space as Space)) problem('Galleries', row, 'space', 'Неизвестная подборка; см. Guide.', 'Toplum näbelli; Guide sahypasyna serediň.');
+  const galleries = rows('Galleries', TRANSFER_LIMITS.photos * 2).map(({ row, values: v }) => {
+    if (version === '1' ? !SPACES.includes(v.space) : v.space !== 'whole_house' && !validRoomId(v.space)) problem('Galleries', row, 'space', 'Неизвестная подборка; см. Guide.', 'Toplum näbelli; Guide sahypasyna serediň.');
     ids('Galleries', row, 'photo_id', v.photo_id);
     const position = Number(v.position);
     if (!Number.isInteger(position) || position < 1 || position > TRANSFER_LIMITS.photos) problem('Galleries', row, 'position', 'Позиция: целое число от 1 до 500.', 'Orun: 1-den 500-e çenli bitin san.');
@@ -111,15 +119,16 @@ export function decodeWorkbook(bytes: Uint8Array): CatalogWorkbook {
     const seen = new Set<string>();
     for (const { row, value } of entries) { const id = key(value); if (seen.has(id)) problem(sheet, row, '', `Повтор: ${id}`, `Gaýtalanýar: ${id}`); seen.add(id); }
   }
+  unique('Rooms', rooms, room => room.id);
   unique('Terms', terms, term => term.id);
   unique('Photos', photos, photo => photo.id);
   unique('Galleries', galleries, entry => `${entry.space}:${entry.photoId}`);
   unique('Galleries', galleries, entry => `${entry.space}:${entry.position}`);
-  return { terms, photos, galleries, issues };
+  return { rooms, terms, photos, galleries, issues };
 }
 
 export function encodeWorkbook(catalog?: Catalog): Uint8Array {
-  if (catalog && (catalog.photos.length > TRANSFER_LIMITS.photos || catalog.terms.length > TRANSFER_LIMITS.terms)) throw new AppError('TRANSFER_LIMIT');
+  if (catalog && (catalog.photos.length > TRANSFER_LIMITS.photos || catalog.terms.length > TRANSFER_LIMITS.terms || catalog.rooms.length > TRANSFER_LIMITS.terms)) throw new AppError('TRANSFER_LIMIT');
   const book = XLSX.utils.book_new();
   const add = (name: string, data: (string | number | boolean)[][]) => {
     const sheet = XLSX.utils.aoa_to_sheet(data);
@@ -127,16 +136,17 @@ export function encodeWorkbook(catalog?: Catalog): Uint8Array {
     if (name in headers) sheet['!autofilter'] = { ref: sheet['!ref']! };
     XLSX.utils.book_append_sheet(book, sheet, name);
   };
-  add('Metadata', [['key', 'value'], ['format_version', '1'], ['exported_at', new Date().toISOString()], ['source', 'draft']]);
+  add('Metadata', [['key', 'value'], ['format_version', '2'], ['exported_at', new Date().toISOString()], ['source', 'draft']]);
+  add('Rooms', [headers.Rooms, ...(catalog?.rooms ?? defaultRooms).map(room => [room.id, room.labels.ru, room.labels.tk])]);
   add('Terms', [headers.Terms, ...(catalog?.terms.map(term => [term.id, term.kind, term.labels.ru, term.labels.tk]) ?? [])]);
   add('Photos', [headers.Photos, ...(catalog?.photos.map((photo, index) => [photo.id, exportFilename(index), photo.room, photo.styleId, photo.paletteIds.join(';'), photo.materialIds.join(';'), photo.detailIds.join(';'), photo.sample]) ?? [])]);
-  add('Galleries', [headers.Galleries, ...(catalog ? SPACES.flatMap(space => catalog.galleries[space].map((id, index) => [space, id, index + 1])) : [])]);
+  add('Galleries', [headers.Galleries, ...(catalog ? catalogSpaces(catalog).flatMap(space => catalog.galleries[space].map((id, index) => [space, id, index + 1])) : [])]);
   add('Guide', [
     ['Русский', 'Türkmençe'],
-    ['Заполняйте Terms, Photos, Galleries. Не меняйте заголовки и Metadata.', 'Terms, Photos, Galleries sahypalaryny dolduryň. Sütün atlaryny we Metadata-ny üýtgetmäň.'],
+    ['Заполняйте Rooms, Terms, Photos, Galleries. Не меняйте заголовки и Metadata.', 'Rooms, Terms, Photos, Galleries sahypalaryny dolduryň. Sütün atlaryny we Metadata-ny üýtgetmäň.'],
     ['ID — постоянный текстовый код. Новый ID добавляет запись; существующий обновляет.', 'ID hemişelik tekst kody. Täze ID ýazgy goşýar; bar bolan ID täzelenýär.'],
     ['Категории: style; palette; material; detail. Оба перевода обязательны.', 'Kategoriýalar: style; palette; material; detail. Iki dilde at gerek.'],
-    ['Комнаты: bathroom; bedroom; living_room; kitchen. Подборка всего дома: whole_house.', 'Otaglar: bathroom; bedroom; living_room; kitchen. Bütin jaý: whole_house.'],
+    ['Комнаты задаются в Rooms: id, ru, tk. В Photos.room и Galleries.space укажите ID. Подборка всего дома: whole_house.', 'Otaglary Rooms-da kesgitläň: id, ru, tk. Photos.room we Galleries.space üçin ID ulanyň. Bütin jaý: whole_house.'],
     ['Несколько ID тегов разделяйте точкой с запятой: oak;linen. Формулы не поддерживаются.', 'Teg ID-lerini nokatly otur bilen aýryň: oak;linen. Formulalar goldanylmaýar.'],
     ['Фото находятся отдельно: выберите ZIP или изображения. image_filename — имя файла без пути.', 'Suratlar aýratyn: ZIP ýa-da suratlary saýlaň. image_filename — ýolsyz faýl ady.'],
     ['Если новый файл не выбран, фото с существующим ID сохраняет своё изображение.', 'Täze faýl saýlanmasa, bar bolan ID-li surat öňki şekilini saklaýar.'],

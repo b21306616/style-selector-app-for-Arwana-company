@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { StyleSheet, Text, View } from 'react-native';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { Button, colors, spaceLabel, tx, typography, useLayout } from '../../components/ui';
 import { PhotoImage } from '../../components/PhotoImage';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
@@ -34,17 +34,18 @@ export function DraftEntryCard() {
       <View testID="draft-photo-editor" style={[styles.editor, split && styles.split]}>
         <View style={[styles.imageColumn, split && styles.imageSplit]}>
           <Text accessibilityRole="header" style={styles.sectionTitle}>{t('Surat', 'Фотография')}</Text>
+          <Pressable testID="draft-photo-picker" accessibilityRole="button" accessibilityLabel={w.photo ? t('Suraty çalşyrmak', 'Заменить фотографию') : t('Interýer suratyny goşuň', 'Добавьте фото интерьера')} disabled={w.busy} onPress={() => void w.choosePhoto()}
+            style={({ pressed }) => [styles.photoPicker, w.busy && styles.photoPickerDisabled, pressed && styles.photoPickerPressed]}>
           {w.photo ? <PhotoImage key={w.photo.id} photo={w.photo} language={language} fit="contain" style={[styles.image, { height: Math.min(280, previewWidth * 0.75) }]} />
             : <View style={styles.placeholder}>
               <View style={styles.photoIcon}><Icon name="photo" size={32} fallback="＋" /></View>
               <Text style={styles.placeholderTitle}>{t('Interýer suratyny goşuň', 'Добавьте фото интерьера')}</Text>
               <Text style={styles.placeholderCopy}>{t('Bir surat · 10 MB çenli', 'Одно фото · до 10 МБ')}</Text>
             </View>}
-          <Button title={w.photo ? t('Başga surat saýlamak', 'Выбрать другое фото') : t('Surat saýlamak', 'Выбрать фотографию')} variant="secondary" disabled={w.busy} onPress={() => void w.choosePhoto()} />
+          </Pressable>
           {w.photo && <Button title={t('Suraty aýyrmak', 'Удалить фото')} variant="ghost" disabled={w.busy} onPress={w.removePhoto} />}
           {w.photo && <Text style={typography.small}>{t('Bir surat · 10 MB çenli', 'Одно фото · до 10 МБ')}</Text>}
           {!pickerOpen && <WorkspaceFeedback area="entry" />}
-          <Text style={typography.small}>{t('Surat enjamda saklanar we oflaýn elýeterli bolar.', 'Фотография сохранится на устройстве и будет доступна офлайн.')}</Text>
         </View>
         <View style={[styles.fields, split && styles.fieldsSplit]}>
           <PhotoMetadataFields presentation="compact" value={w.fields} terms={draft.terms} rooms={draft.rooms} photos={draft.photos} language={language} disabled={w.busy}
@@ -84,7 +85,7 @@ const styles = StyleSheet.create({
   card: { padding: 16, gap: 24, backgroundColor: colors.surface, borderRadius: 24, borderWidth: 1, borderColor: colors.border }, tabletCard: { padding: 24 },
   heading: { gap: 6 }, title: { ...typography.heading, color: colors.ink },
   editor: { gap: 24, flexDirection: 'column' }, split: { flexDirection: 'row', alignItems: 'flex-start' }, imageColumn: { minWidth: 0, gap: 12 }, imageSplit: { flex: 0.8 }, fields: { minWidth: 0, gap: 24 }, fieldsSplit: { flex: 1.2 },
-  image: { width: '100%', borderRadius: 16, backgroundColor: colors.sand },
+  photoPicker: { borderRadius: 16 }, photoPickerDisabled: { opacity: 0.45 }, photoPickerPressed: { opacity: 0.72 }, image: { width: '100%', borderRadius: 16, backgroundColor: colors.sand },
   placeholder: { minHeight: 176, padding: 20, alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.greenSoft, borderRadius: 16 },
   photoIcon: { padding: 10, backgroundColor: colors.surface, borderRadius: 16, marginBottom: 4 }, placeholderTitle: { ...typography.body, color: colors.ink, fontWeight: '600', textAlign: 'center' }, placeholderCopy: { ...typography.small, textAlign: 'center' },
   collections: { gap: 12, paddingTop: 20, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }, sectionTitle: { ...typography.body, color: colors.ink, fontWeight: '600' },

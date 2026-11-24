@@ -52,7 +52,9 @@ test('staff can create a photo directly on the dashboard without opening Excel i
   await render(<StaffWorkspaceProvider><Probe /></StaffWorkspaceProvider>);
   const save = screen.getByRole('button', { name: 'Сохранить фото в черновик' });
   expect(save).toBeDisabled();
-  await fireEvent.press(screen.getByRole('button', { name: 'Выбрать фотографию' }));
+  expect(screen.getByRole('button', { name: 'Добавьте фото интерьера' })).toBeOnTheScreen();
+  expect(screen.queryByRole('button', { name: 'Выбрать фотографию' })).toBeNull();
+  await fireEvent.press(screen.getByTestId('draft-photo-picker'));
   expect(save).toBeDisabled();
   await fireEvent.press(screen.getByRole('button', { name: 'Комната' }));
   await fireEvent.press(screen.getByRole('radio', { name: 'Кухня' }));
@@ -112,7 +114,7 @@ test('room changes and deselection remove the previous collection while preservi
   await fireEvent.press(screen.getByRole('button', { name: 'Комната' }));
   await fireEvent.press(screen.getByRole('radio', { name: 'Ванная' }));
   await fireEvent.press(screen.getByRole('button', { name: 'Готово' }));
-  await fireEvent.press(screen.getByRole('button', { name: 'Выбрать фотографию' }));
+  await fireEvent.press(screen.getByTestId('draft-photo-picker'));
   await fireEvent.press(screen.getByRole('checkbox', { name: 'Ванная' }));
   await fireEvent.press(screen.getByRole('checkbox', { name: 'Весь дом' }));
   await fireEvent.press(screen.getByRole('button', { name: 'Комната' }));
@@ -154,7 +156,7 @@ test('a failed term save stays in the sheet, and unfinished labels and choices s
 test('clear confirmation discards only unfinished input and photo feedback is inside the draft card', async () => {
   const before = cloneCatalog(app.draft!);
   await render(<StaffWorkspaceProvider><Probe /></StaffWorkspaceProvider>);
-  await fireEvent.press(screen.getByRole('button', { name: 'Выбрать фотографию' }));
+  await fireEvent.press(screen.getByTestId('draft-photo-picker'));
   await fireEvent.press(screen.getByRole('button', { name: 'Очистить форму' }));
   await fireEvent.press(screen.getByRole('button', { name: 'Продолжить' }));
   expect(controller.photo).toEqual(staged);
@@ -163,7 +165,7 @@ test('clear confirmation discards only unfinished input and photo feedback is in
   expect(controller.photo).toBeNull();
   expect(discardPreparedPhotos).toHaveBeenCalledWith([staged]);
   expect(app.draft).toEqual(before);
-  await fireEvent.press(screen.getByRole('button', { name: 'Выбрать фотографию' }));
+  await fireEvent.press(screen.getByTestId('draft-photo-picker'));
   await act(async () => { controller.setFields({ ...controller.fields, room: 'kitchen' }); });
   await fireEvent.press(screen.getByRole('button', { name: 'Сохранить фото в черновик' }));
   expect(within(screen.getByTestId('draft-entry-card')).getByText('Фото добавлено в черновик.')).toBeOnTheScreen();
@@ -269,7 +271,7 @@ test('changing viewport and text size preserves the photo while adapting the for
   const dimensions = jest.spyOn(require('react-native'), 'useWindowDimensions').mockReturnValue({ width: 1024, height: 768, scale: 1, fontScale: 1 });
   try {
     const view = await render(<StaffWorkspaceProvider><Probe /></StaffWorkspaceProvider>);
-    await fireEvent.press(screen.getByRole('button', { name: 'Surat saýlamak' }));
+    await fireEvent.press(screen.getByTestId('draft-photo-picker'));
     await act(async () => { controller.setFields({ ...controller.fields, room: 'kitchen' }); });
     expect(screen.getByTestId('draft-photo-editor')).toHaveStyle({ flexDirection: 'row' });
     for (const [width, height, fontScale] of [[768, 1024, 1], [390, 844, 1], [320, 568, 2], [1024, 768, 1.5]]) {
@@ -336,6 +338,10 @@ test.each(['room', 'style'] as const)('bulk %s deletion preserves search selecti
   await fireEvent.press(screen.getByRole('radio', { name: 'Первый' }));
   await fireEvent.press(screen.getByRole('button', { name: 'Выбрать для удаления' }));
   expect(screen.getByRole('checkbox', { name: kind === 'room' ? 'Кухня' : 'Минимализм' })).toBeDisabled();
+  await fireEvent.press(screen.getByRole('button', { name: 'Выбрать все' }));
+  expect(screen.getByRole('button', { name: 'Удалить (2)' })).toBeEnabled();
+  await fireEvent.press(screen.getByRole('button', { name: 'Снять все' }));
+  expect(screen.getByRole('button', { name: 'Удалить (0)' })).toBeDisabled();
   await fireEvent.press(within(screen.getByTestId('selection-sheet')).getByRole('checkbox', { name: 'Первый' }));
   await fireEvent.changeText(screen.getByLabelText(`Поиск: ${label}`), 'Ikinji');
   await fireEvent.press(screen.getByRole('checkbox', { name: 'Второй' }));

@@ -100,6 +100,8 @@ function SelectionList({ label, language, options, selectedIds, onChange, onClos
   }, [options, search]);
   const selected = useMemo(() => new Set(selectedIds), [selectedIds]);
   const marked = useMemo(() => new Set(deleteIds), [deleteIds]);
+  const deletableIds = useMemo(() => options.filter(option => !option.usageCount).map(option => option.id), [options]);
+  const allDeletableMarked = deletableIds.length > 0 && deletableIds.every(id => marked.has(id));
   const remove = async () => {
     if (disabled || deleting.current || !deleteIds.length || !onDelete) return;
     deleting.current = true;
@@ -120,7 +122,7 @@ function SelectionList({ label, language, options, selectedIds, onChange, onClos
       <TextField label={`${t('Gözleg', 'Поиск')}: ${label}`} value={search} editable={!disabled} autoCorrect={false}
         onChangeText={value => { setSearch(value); list.current?.scrollToOffset({ offset: 0, animated: false }); }} placeholder={t('Ady boýunça gözleg', 'Поиск по названию')} />
     </View>}
-    <FlatList ref={list} data={filtered} extraData={selected} keyExtractor={option => option.id}
+    <FlatList ref={list} data={filtered} extraData={mode === 'delete' ? marked : selected} keyExtractor={option => option.id}
       style={styles.list} contentContainerStyle={styles.listContent} initialNumToRender={12} maxToRenderPerBatch={12} windowSize={5}
       keyboardShouldPersistTaps="handled" keyboardDismissMode="on-drag"
       ListHeaderComponent={<View style={styles.listActions}>
@@ -129,7 +131,11 @@ function SelectionList({ label, language, options, selectedIds, onChange, onClos
           {onCreate && <Button title={createLabel ?? t('＋ Täze termin', '＋ Новый термин')} accessibilityLabel={`${t('＋ Täze', '＋ Добавить')}: ${label}`} variant="secondary" disabled={disabled} onPress={onCreate} style={styles.action} />}
           {onDelete && <Button title={t('Öçürmek üçin saýlamak', 'Выбрать для удаления')} variant="ghost" disabled={disabled || !options.length} onPress={() => { onManage?.(); setMode('delete'); setDeleteIds([]); }} style={styles.action} />}
           {allowClear && <Button title={t('Arassalamak', 'Сбросить')} accessibilityLabel={t('Saýlawy arassalamak', 'Сбросить выбор')} variant="ghost" disabled={disabled || !selectedIds.length} onPress={() => onChange([])} style={styles.action} />}
-        </> : <Button title={t('Öçürmegi ýatyrmak', 'Отменить удаление')} variant="ghost" disabled={disabled} onPress={() => { setMode('select'); setDeleteIds([]); onManage?.(); }} />}
+        </> : <>
+          <Button title={allDeletableMarked ? t('Hemmesini aýyrmak', 'Снять все') : t('Hemmesini saýlamak', 'Выбрать все')} variant="secondary" disabled={disabled || !deletableIds.length}
+            onPress={() => setDeleteIds(allDeletableMarked ? [] : deletableIds)} style={styles.action} />
+          <Button title={t('Öçürmegi ýatyrmak', 'Отменить удаление')} variant="ghost" disabled={disabled} onPress={() => { setMode('select'); setDeleteIds([]); onManage?.(); }} style={styles.action} />
+        </>}
       </View>
       {mode === 'delete' && <Text style={typography.small}>{t('Ulanylýan ýazgylary öçürmek üçin ilki suratlarda çalyşyň.', 'Используемые записи сначала замените у связанных фотографий.')}</Text>}
       </View>}

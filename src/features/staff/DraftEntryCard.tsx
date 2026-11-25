@@ -1,13 +1,12 @@
 import { useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
-import { Button, colors, spaceLabel, tx, typography, useLayout } from '../../components/ui';
+import { Button, colors, tx, typography, useLayout } from '../../components/ui';
 import { PhotoImage } from '../../components/PhotoImage';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { Icon } from '../../components/Icon';
 import { hasRoom } from '../../domain/rooms';
 import { useApp } from '../../state/AppProvider';
 import { PhotoMetadataFields, TermLabelFields } from './EntryFields';
-import { SelectionRow } from './SelectionField';
 import { WorkspaceFeedback } from './WorkspaceFeedback';
 import { useStaffWorkspace } from './workspace-context';
 
@@ -49,7 +48,7 @@ export function DraftEntryCard() {
         </View>
         <View style={[styles.fields, split && styles.fieldsSplit]}>
           <PhotoMetadataFields presentation="compact" value={w.fields} terms={draft.terms} rooms={draft.rooms} photos={draft.photos} language={language} disabled={w.busy}
-            onChange={value => { w.setFields(value); w.setSpaces(w.spaces.filter(space => space === 'whole_house' || space === value.room)); }}
+            onChange={w.setFields}
             onAddTerm={w.startTerm} onAddRoom={w.startRoom} onDeleteOptions={w.deleteOptions} pickerFeedback={<WorkspaceFeedback area="entry" />} onManage={w.clearEntryFeedback}
             onPickerVisibilityChange={visible => { setPickerOpen(visible); if (visible) w.clearEntryFeedback(); }}
             roomEditor={w.inlineRoom ? <>
@@ -62,17 +61,9 @@ export function DraftEntryCard() {
               {saveTerm}
               <Button title={t('Saýlawa dolanmak', 'Вернуться к выбору')} variant="ghost" disabled={w.busy} onPress={() => w.setInlineTerm(false)} />
             </> : null} />
-          <View style={styles.collections}>
-            <Text accessibilityRole="header" style={styles.sectionTitle}>{t('Toplumlar', 'Подборки')}</Text>
-            <Text style={typography.small}>{t('Hökmany däl. Suraty topluma soň hem goşup bilersiňiz.', 'Необязательно. Фото можно добавить в подборку позже.')}</Text>
-            {[...(hasRoom(draft, w.fields.room) ? [w.fields.room] : []), 'whole_house'].map(space => <SelectionRow key={space} label={spaceLabel(space, language, draft.rooms)} checked={w.spaces.includes(space)} disabled={w.busy}
-              onPress={() => w.setSpaces(w.spaces.includes(space) ? w.spaces.filter(value => value !== space) : [...w.spaces, space])} />)}
-          </View>
         </View>
       </View>
       <View style={styles.footer}>
-        {!hasRoom(draft, w.fields.room) && <Text style={typography.small}>{t('Suraty ýatda saklamak üçin otagy saýlaň.', 'Выберите комнату, чтобы сохранить фото.')}</Text>}
-        <Text style={typography.small}>{t('Tegleri soň dolduryp bilersiňiz. Çap etmek üçin bir stil we her kategoriýadan azyndan bir teg gerek.', 'Теги можно заполнить позже. Для публикации нужны стиль и хотя бы один тег каждой категории.')}</Text>
         <Button title={t('Suraty garalama ýazdyrmak', 'Сохранить фото в черновик')} disabled={w.busy || !w.photo || !hasRoom(draft, w.fields.room)} onPress={() => void w.savePhoto()} />
         <Button title={t('Formany arassalamak', 'Очистить форму')} variant="ghost" disabled={w.busy || !w.dirty} onPress={() => setDiscard(true)} />
       </View>
@@ -88,6 +79,6 @@ const styles = StyleSheet.create({
   photoPicker: { borderRadius: 16 }, photoPickerDisabled: { opacity: 0.45 }, photoPickerPressed: { opacity: 0.72 }, image: { width: '100%', borderRadius: 16, backgroundColor: colors.sand },
   placeholder: { minHeight: 176, padding: 20, alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.greenSoft, borderRadius: 16 },
   photoIcon: { padding: 10, backgroundColor: colors.surface, borderRadius: 16, marginBottom: 4 }, placeholderTitle: { ...typography.body, color: colors.ink, fontWeight: '600', textAlign: 'center' }, placeholderCopy: { ...typography.small, textAlign: 'center' },
-  collections: { gap: 12, paddingTop: 20, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border }, sectionTitle: { ...typography.body, color: colors.ink, fontWeight: '600' },
+  sectionTitle: { ...typography.body, color: colors.ink, fontWeight: '600' },
   footer: { paddingTop: 20, gap: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
 });

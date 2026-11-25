@@ -108,26 +108,13 @@ test('searching in either language and dismissing a multi-select sheet retains e
   expect(app.saveDraft).not.toHaveBeenCalled();
 });
 
-test('room changes and deselection remove the previous collection while preserving the photo and Whole House', async () => {
+test('draft entry omits collection controls and helper copy', async () => {
   await render(<StaffWorkspaceProvider><Probe /></StaffWorkspaceProvider>);
   expect(screen.queryByRole('tab')).toBeNull();
-  await fireEvent.press(screen.getByRole('button', { name: 'Комната' }));
-  await fireEvent.press(screen.getByRole('radio', { name: 'Ванная' }));
-  await fireEvent.press(screen.getByRole('button', { name: 'Готово' }));
-  await fireEvent.press(screen.getByTestId('draft-photo-picker'));
-  await fireEvent.press(screen.getByRole('checkbox', { name: 'Ванная' }));
-  await fireEvent.press(screen.getByRole('checkbox', { name: 'Весь дом' }));
-  await fireEvent.press(screen.getByRole('button', { name: 'Комната' }));
-  await fireEvent.press(screen.getByRole('radio', { name: 'Кухня' }));
-  expect(controller.spaces).toEqual(['whole_house']);
-  expect(screen.getByRole('radio', { name: 'Кухня' })).toBeChecked();
-  await fireEvent.press(screen.getByRole('radio', { name: 'Кухня' }));
-  expect(controller.fields.room).toBe('');
-  await fireEvent(screen.getByTestId('selection-sheet'), 'requestClose');
-  expect(screen.getByRole('button', { name: 'Комната' })).toHaveAccessibilityValue({ text: 'Не выбрано' });
-  expect(controller.photo).toEqual(staged);
-  expect(screen.getByRole('checkbox', { name: 'Весь дом' })).toBeChecked();
-  expect(screen.getByRole('button', { name: 'Сохранить фото в черновик' })).toBeDisabled();
+  expect(screen.queryByText('Подборки')).toBeNull();
+  expect(screen.queryByText('Необязательно. Фото можно добавить в подборку позже.')).toBeNull();
+  expect(screen.queryByText('Выберите комнату, чтобы сохранить фото.')).toBeNull();
+  expect(screen.queryByText('Теги можно заполнить позже. Для публикации нужны стиль и хотя бы один тег каждой категории.')).toBeNull();
 });
 
 test('a failed term save stays in the sheet, and unfinished labels and choices survive a lock', async () => {

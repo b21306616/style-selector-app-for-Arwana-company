@@ -14,7 +14,7 @@ const messages: Record<string, Record<Language, string>> = {
   DRAFT_PHOTO_TOO_LARGE: { tk: 'Saýlanan suratyň ölçegi 10 MB-dan geçmeli däl.', ru: 'Размер выбранного фото не должен превышать 10 МБ.' },
   IMAGE_SIZE_UNAVAILABLE: { tk: 'Suratyň ölçegini barlap bolmady. Başga surat saýlaň.', ru: 'Не удалось проверить размер фото. Выберите другое изображение.' },
   DUPLICATE_TERM: { tk: 'Bu kategoriýada şeýle atly termin eýýäm bar.', ru: 'Термин с таким названием уже есть в этой категории.' },
-  INVALID_WORKBOOK: { tk: 'Excel faýly okalmady. Programmanyň .xlsx şablonyny ulanyň.', ru: 'Не удалось прочитать Excel. Используйте шаблон .xlsx из приложения.' },
+  INVALID_WORKBOOK: { tk: 'Diňe Russian we Turkmen (şol tertipde) atly iki sahypaly .xlsx faýly gerek. Köne format goldanylmaýar — täze şablon üçin «Şablony almak» düwmesine basyň.', ru: 'Нужен файл .xlsx ровно с двумя листами Russian и Turkmen (в таком порядке). Старый формат не поддерживается — нажмите «Скачать шаблон» для нового файла.' },
   INVALID_ARCHIVE: { tk: 'ZIP nädogry, zaýalanan ýa-da goldanylmaýar.', ru: 'ZIP повреждён, содержит небезопасные пути или не поддерживается.' },
   TRANSFER_LIMIT: { tk: 'Çäk: 500 surat, XLSX 10 MiB, her surat 50 MiB, suratlar jemi 1 GiB.', ru: 'Лимиты: 500 фото, XLSX 10 МиБ, фото 50 МиБ каждое и 1 ГиБ всего.' },
   TRANSFER_CANCELED: { tk: 'Amal ýatyryldy. Garalama üýtgemedi.', ru: 'Операция отменена. Черновик не изменён.' },

@@ -215,8 +215,7 @@ test('replacement requires confirmation and refuses a draft changed after the re
 
 test('a failed import save releases its uncommitted images and preserves the old catalog', async () => {
   const workbook = decodeWorkbook(encodeWorkbook(seedCatalog));
-  workbook.photos = [{ row: 2, value: { ...workbook.photos[0].value, id: 'imported-photo', filename: 'new.jpg' } }];
-  workbook.galleries = [];
+  workbook.photos = [{ ...workbook.photos[0], value: { ...workbook.photos[0].value, filename: 'new.jpg' } }];
   jest.mocked(pickWorkbook).mockResolvedValue({ name: 'new.xlsx', workbook });
   jest.mocked(pickImportImages).mockResolvedValue(new Map([['new.jpg', staged]]));
   const original = cloneCatalog(app.draft!);
@@ -243,6 +242,60 @@ test('export shares workbook and photo ZIP from one snapshot and can share them 
   expect(shareExport).toHaveBeenNthCalledWith(1, '/cache/catalog.xlsx', false);
   expect(shareExport).toHaveBeenNthCalledWith(2, '/cache/photos.zip', true);
   expect(shareExport).toHaveBeenNthCalledWith(3, '/cache/catalog.xlsx', false);
+  expect(screen.getByText(/Пустые ячейки необходимо заполнить в Excel перед импортом/)).toBeOnTheScreen();
+});
+
+test('Excel guidance describes both language sheets and six required columns', async () => {
+  await render(<StaffWorkspaceProvider><Probe /></StaffWorkspaceProvider>);
+  expect(screen.getByText(/Для импорта обязательны все шесть столбцов/)).toBeOnTheScreen();
+  expect(screen.getByText('Image filename · Room · Style · Palette · Material · Detail')).toBeOnTheScreen();
+  await fireEvent.press(screen.getByRole('button', { name: 'Импорт из Excel' }));
+  expect(screen.getByText(/Совпадающее имя обновляет существующее фото/)).toBeOnTheScreen();
+  expect(screen.getByText(/Новые фото добавляются только в подборку своей комнаты/)).toBeOnTheScreen();
+});
+
+test('unsupported workbook guidance directs staff to download the new template without opening import review', async () => {
+  jest.mocked(pickWorkbook).mockRejectedValue(new AppError('INVALID_WORKBOOK'));
+  await render(<StaffWorkspaceProvider><Probe /></StaffWorkspaceProvider>);
+  await fireEvent.press(screen.getByRole('button', { name: 'Импорт из Excel' }));
+  expect(screen.getByText(/Старый формат не поддерживается — нажмите «Скачать шаблон»/)).toBeOnTheScreen();
+  expect(screen.queryByText('Проверка импорта')).toBeNull();
+  expect(app.saveDraft).not.toHaveBeenCalled();
+});
+
+test('blocked import review does not display misleading pre-publish tag warnings alongside blocking issues', async () => {
+  const workbook = decodeWorkbook(encodeWorkbook(seedCatalog));
+  workbook.photos = [{ ...workbook.photos[0], value: { ...workbook.photos[0].value, room: { ru: '', tk: '' } } }];
+  jest.mocked(pickWorkbook).mockResolvedValue({ name: 'broken.xlsx', workbook });
+  await render(<StaffWorkspaceProvider><Probe /></StaffWorkspaceProvider>);
+  await act(async () => { await controller.chooseWorkbook(); });
+  expect(controller.review!.issues.length).toBeGreaterThan(0);
+  expect(controller.review!.warnings).toBeGreaterThan(0);
+  expect(screen.queryByText(/Перед публикацией потребуется дополнить теги/)).toBeNull();
+});
+
+test('Turkmen export copy uses correct unused vocabulary wording', async () => {
+  app.language = 'tk';
+  jest.mocked(createExport).mockResolvedValue({ workbook: '/cache/catalog.xlsx', photos: '/cache/photos.zip', directory: '/cache/export' });
+  await render(<StaffWorkspaceProvider><Probe /></StaffWorkspaceProvider>);
+  await fireEvent.press(screen.getByRole('button', { name: 'Excel-e eksport' }));
+  expect(screen.getByText(/ulanylmaýan otaglar, tegler/)).toBeOnTheScreen();
+});
+
+test('import review can display a newly created room before it exists in the draft', async () => {
+  const workbook = decodeWorkbook(encodeWorkbook(seedCatalog));
+  workbook.photos = [{ ...workbook.photos[0], value: { ...workbook.photos[0].value, filename: 'office.jpg', room: { ru: 'Кабинет', tk: 'Iş otagy' } } }];
+  jest.mocked(pickWorkbook).mockResolvedValue({ name: 'office.xlsx', workbook });
+  jest.mocked(pickImportImages).mockResolvedValue(new Map([['office.jpg', staged]]));
+  await render(<StaffWorkspaceProvider><Probe /></StaffWorkspaceProvider>);
+  await act(async () => { await controller.chooseWorkbook(); });
+  await act(async () => { await controller.chooseImages(); });
+  const room = controller.review!.catalog.rooms.find(item => item.labels.ru === 'Кабинет')!;
+  expect(app.draft!.galleries[room.id]).toBeUndefined();
+  expect(controller.review!.issues).toEqual([]);
+  expect(screen.getByText('Кабинет')).toBeOnTheScreen();
+  expect(screen.getByText('0 → 1')).toBeOnTheScreen();
+  expect(screen.getByRole('button', { name: 'Сохранить импорт в черновик' })).toBeEnabled();
 });
 
 test('Turkmen direct-entry and Excel controls remain present on a narrow screen', async () => {

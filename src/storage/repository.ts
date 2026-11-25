@@ -1,6 +1,7 @@
 import * as SQLite from 'expo-sqlite';
 import { seedCatalog } from '../data/catalog';
 import { cloneCatalog, validateCatalog } from '../domain/catalog';
+import { normalizePhotoFilenames } from '../domain/photo-filenames';
 import { AppError } from '../domain/errors';
 import { isValidSession } from '../domain/session';
 import { type Catalog, type Language, type Session } from '../domain/types';
@@ -63,20 +64,29 @@ async function database(): Promise<SQLite.SQLiteDatabase> {
   return opening;
 }
 
-function parsePublished(payload: string | undefined): Catalog {
+interface ParsedCatalog { catalog: Catalog; migratedPayload?: string }
+
+function parsePublishedRecord(payload: string | undefined): ParsedCatalog {
   try {
-    const catalog = normalizeCatalog(JSON.parse(payload ?? 'null'));
+    const raw = JSON.parse(payload ?? 'null');
+    const catalog = normalizeCatalog(raw);
     if (validateCatalog(catalog).length) throw new Error('Invalid catalog');
     const value = catalog as Catalog;
     if (typeof value.id !== 'string' || !Number.isInteger(value.version) || typeof value.createdAt !== 'string') throw new Error('Invalid header');
-    return value;
+    const normalized = JSON.stringify(value);
+    return { catalog: value, ...(JSON.stringify(raw) === normalized ? {} : { migratedPayload: normalized }) };
   } catch {
     throw new AppError('CATALOG_DAMAGED');
   }
 }
 
-function parseDraft(payload: string | undefined): Catalog {
-  const value = normalizeCatalog(JSON.parse(payload ?? 'null')) as Catalog;
+function parsePublished(payload: string | undefined): Catalog {
+  return parsePublishedRecord(payload).catalog;
+}
+
+function parseDraftRecord(payload: string | undefined): ParsedCatalog {
+  const raw = JSON.parse(payload ?? 'null');
+  const value = normalizeCatalog(raw) as Catalog;
   // Incomplete editorial metadata is allowed in drafts. Malformed structures are not.
   if (!value || !Array.isArray(value.rooms) || value.rooms.some(room => !room || !validRoomId(room.id) || !validLabels(room.labels)) || new Set(value.rooms.map(room => room.id)).size !== value.rooms.length || !Array.isArray(value.photos) || !Array.isArray(value.terms) ||
     !value.galleries || catalogSpaces(value).some((space) => !Array.isArray(value.galleries[space])) ||
@@ -84,7 +94,12 @@ function parseDraft(payload: string | undefined): Catalog {
     value.photos.some((photo) => !photo || typeof photo.id !== 'string' || !photo.image || !Array.isArray(photo.paletteIds) || !Array.isArray(photo.materialIds) || !Array.isArray(photo.detailIds))) {
     throw new AppError('DRAFT_DAMAGED');
   }
-  return value;
+  const normalized = JSON.stringify(value);
+  return { catalog: value, ...(JSON.stringify(raw) === normalized ? {} : { migratedPayload: normalized }) };
+}
+
+function parseDraft(payload: string | undefined): Catalog {
+  return parseDraftRecord(payload).catalog;
 }
 
 export interface AppSnapshot {
@@ -96,38 +111,54 @@ export interface AppSnapshot {
 }
 
 async function readState(db: SQLite.SQLiteDatabase): Promise<AppSnapshot> {
-  const currentRow = await db.getFirstAsync<{ payload: string }>('SELECT payload FROM catalog_revisions WHERE id = (SELECT value FROM metadata WHERE key = ?)', 'current_catalog');
-  const catalog = parsePublished(currentRow?.payload);
+  const currentRow = await db.getFirstAsync<{ id: string; payload: string }>('SELECT id, payload FROM catalog_revisions WHERE id = (SELECT value FROM metadata WHERE key = ?)', 'current_catalog');
+  const parsedCatalog = parsePublishedRecord(currentRow?.payload);
+  const catalog = parsedCatalog.catalog;
+  const revisionMigrations = new Map<string, string>();
+  if (currentRow && parsedCatalog.migratedPayload) revisionMigrations.set(currentRow.id, parsedCatalog.migratedPayload);
   const notices: string[] = [];
   const draftRow = await db.getFirstAsync<{ payload: string }>('SELECT payload FROM catalog_draft WHERE singleton = 1');
   let draft: Catalog;
+  let draftMigration: string | undefined;
+  let damagedDraft: string | undefined;
   try {
-    draft = parseDraft(draftRow?.payload);
+    const parsedDraft = parseDraftRecord(draftRow?.payload);
+    draft = parsedDraft.catalog;
+    draftMigration = parsedDraft.migratedPayload;
   } catch {
     draft = cloneCatalog(catalog);
-    await db.withTransactionAsync(async () => {
-      if (draftRow) await db.runAsync('INSERT INTO recovery_copies (kind, payload, created_at) VALUES (?, ?, ?)', 'draft', draftRow.payload, new Date().toISOString());
-      await db.runAsync('INSERT OR REPLACE INTO catalog_draft (singleton, payload) VALUES (1, ?)', JSON.stringify(draft));
-    });
+    damagedDraft = draftRow?.payload;
+    draftMigration = JSON.stringify(draft);
     notices.push('DRAFT_DAMAGED');
   }
 
   let session: Session | null = null;
   const sessionRow = await db.getFirstAsync<{ payload: string; catalog_id: string }>('SELECT payload, catalog_id FROM active_session WHERE singleton = 1');
+  let damagedSession: { payload: string; catalogId: string } | undefined;
   if (sessionRow) {
     try {
       const sessionCatalogRow = await db.getFirstAsync<{ payload: string }>('SELECT payload FROM catalog_revisions WHERE id = ?', sessionRow.catalog_id);
-      const sessionCatalog = sessionRow.catalog_id === catalog.id ? catalog : parsePublished(sessionCatalogRow?.payload);
+      const parsedSessionCatalog = sessionRow.catalog_id === currentRow?.id ? parsedCatalog : parsePublishedRecord(sessionCatalogRow?.payload);
+      if (parsedSessionCatalog.migratedPayload) revisionMigrations.set(sessionRow.catalog_id, parsedSessionCatalog.migratedPayload);
+      const sessionCatalog = parsedSessionCatalog.catalog;
       const saved: unknown = JSON.parse(sessionRow.payload);
       if (!isValidSession(saved, sessionCatalog)) throw new Error('Invalid session');
       session = { ...saved, catalog: sessionCatalog };
     } catch {
-      await db.withTransactionAsync(async () => {
-        await db.runAsync('INSERT INTO recovery_copies (kind, payload, catalog_id, created_at) VALUES (?, ?, ?, ?)', 'session', sessionRow.payload, sessionRow.catalog_id, new Date().toISOString());
-        await db.runAsync('DELETE FROM active_session WHERE singleton = 1');
-      });
+      damagedSession = { payload: sessionRow.payload, catalogId: sessionRow.catalog_id };
       notices.push('SESSION_DAMAGED');
     }
+  }
+  if (revisionMigrations.size || draftMigration || damagedDraft !== undefined || damagedSession) {
+    await db.withTransactionAsync(async () => {
+      for (const [id, payload] of revisionMigrations) await db.runAsync('UPDATE catalog_revisions SET payload = ? WHERE id = ?', payload, id);
+      if (damagedDraft !== undefined) await db.runAsync('INSERT INTO recovery_copies (kind, payload, created_at) VALUES (?, ?, ?)', 'draft', damagedDraft, new Date().toISOString());
+      if (draftMigration) await db.runAsync('INSERT OR REPLACE INTO catalog_draft (singleton, payload) VALUES (1, ?)', draftMigration);
+      if (damagedSession) {
+        await db.runAsync('INSERT INTO recovery_copies (kind, payload, catalog_id, created_at) VALUES (?, ?, ?, ?)', 'session', damagedSession.payload, damagedSession.catalogId, new Date().toISOString());
+        await db.runAsync('DELETE FROM active_session WHERE singleton = 1');
+      }
+    });
   }
   const languageRow = await db.getFirstAsync<{ value: string }>('SELECT value FROM metadata WHERE key = ?', 'language');
   return { language: languageRow?.value === 'tk' ? 'tk' : 'ru', catalog, draft, session, notices };
@@ -176,7 +207,10 @@ export function saveDraft(draft: Catalog): Promise<void> {
   return serialized(async () => {
     const db = await database();
     // Draft content can be incomplete; publication performs the strict validation.
-    await db.runAsync('INSERT OR REPLACE INTO catalog_draft (singleton, payload) VALUES (1, ?)', JSON.stringify(draft));
+    const row = await db.getFirstAsync<{ payload: string }>('SELECT payload FROM catalog_draft WHERE singleton = 1');
+    const previous = row ? parseDraft(row.payload) : undefined;
+    const saved = normalizePhotoFilenames(draft, previous);
+    await db.runAsync('INSERT OR REPLACE INTO catalog_draft (singleton, payload) VALUES (1, ?)', JSON.stringify(saved));
   });
 }
 
@@ -184,7 +218,8 @@ export function resetDraft(): Promise<Catalog> {
   return serialized(async () => {
     const db = await database();
     const row = await db.getFirstAsync<{ payload: string }>('SELECT payload FROM catalog_revisions WHERE id = (SELECT value FROM metadata WHERE key = ?)', 'current_catalog');
-    const catalog = parsePublished(row?.payload);
+    const previous = await db.getFirstAsync<{ payload: string }>('SELECT payload FROM catalog_draft WHERE singleton = 1');
+    const catalog = normalizePhotoFilenames(parsePublished(row?.payload), previous ? parseDraft(previous.payload) : undefined);
     await db.runAsync('INSERT OR REPLACE INTO catalog_draft (singleton, payload) VALUES (1, ?)', JSON.stringify(catalog));
     return cloneCatalog(catalog);
   });

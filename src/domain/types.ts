@@ -11,6 +11,10 @@ export interface Term { id: string; kind: TermKind; labels: Labels }
 export type ImageRef = { kind: 'bundled'; key: string } | { kind: 'local'; file: string; thumbnail: string };
 export interface Photo {
   id: string;
+  /** Stable JPEG filename used by Excel and photo archives; never an image path. */
+  exportFilename?: string;
+  /** Original imported filename when it differs from the JPEG export name. */
+  sourceFilename?: string;
   room: Room;
   styleId: string;
   paletteIds: string[];
@@ -23,6 +27,8 @@ export interface Photo {
 }
 export interface Catalog {
   id: string;
+  /** Next generated photo filename number; retained when photos are deleted. */
+  nextPhotoNumber?: number;
   version: number;
   createdAt: string;
   rooms: RoomDefinition[];

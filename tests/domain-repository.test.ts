@@ -2,6 +2,7 @@
 import { afterEach, beforeEach, expect, jest, test } from '@jest/globals';
 import { addDraftRoom, cloneCatalog, removeDraftOptions } from '../src/domain/catalog';
 import { createSession, rateSession } from '../src/domain/session';
+import type { Catalog } from '../src/domain/types';
 
 // Exercise the actual SQL and rollback behavior without a simulator/native bridge.
 jest.mock('expo-sqlite', () => {
@@ -72,12 +73,55 @@ test('legacy room definitions are supplied when reading published, draft, and se
   expect(resumed.notices).toEqual([]);
 });
 
+test('loading legacy filename data persists the backfill for drafts, revisions, and sessions', async () => {
+  const initial = await repository.loadState();
+  await repository.saveSession(createSession(initial.catalog, 'kitchen', 'filename-backfill'));
+  const changed = cloneCatalog(initial.draft);
+  changed.terms[0].labels.tk = 'Soňky neşir';
+  await repository.saveDraft(changed);
+  const published = await repository.publishDraft();
+  const legacy = (catalog: Catalog) => {
+    const value = JSON.parse(JSON.stringify(catalog)) as Catalog;
+    delete value.nextPhotoNumber;
+    for (const photo of value.photos) {
+      delete photo.exportFilename;
+      delete photo.sourceFilename;
+    }
+    return value;
+  };
+  const legacyCurrent = legacy(published.catalog);
+  const legacySession = legacy(initial.catalog);
+  sqlite.__database.prepare('UPDATE catalog_revisions SET payload = ? WHERE id = ?').run(JSON.stringify(legacyCurrent), published.catalog.id);
+  sqlite.__database.prepare('UPDATE catalog_revisions SET payload = ? WHERE id = ?').run(JSON.stringify(legacySession), initial.catalog.id);
+  sqlite.__database.prepare('UPDATE catalog_draft SET payload = ?').run(JSON.stringify(legacyCurrent));
+
+  const migrated = await repository.loadState();
+  const storedRevision = JSON.parse((sqlite.__database.prepare('SELECT payload FROM catalog_revisions WHERE id = ?').get(published.catalog.id) as { payload: string }).payload) as Catalog;
+  const storedSessionRevision = JSON.parse((sqlite.__database.prepare('SELECT payload FROM catalog_revisions WHERE id = ?').get(initial.catalog.id) as { payload: string }).payload) as Catalog;
+  const storedDraft = JSON.parse((sqlite.__database.prepare('SELECT payload FROM catalog_draft').get() as { payload: string }).payload) as Catalog;
+  for (const catalog of [storedRevision, storedSessionRevision, storedDraft]) {
+    expect(catalog.photos.every(photo => /^photo-\d+\.jpg$/.test(photo.exportFilename ?? ''))).toBe(true);
+    expect(catalog.nextPhotoNumber).toBeGreaterThan(catalog.photos.length);
+  }
+  expect(migrated.session?.catalog.photos[0].exportFilename).toBe(storedSessionRevision.photos[0].exportFilename);
+
+  const nextNumber = migrated.draft.nextPhotoNumber!;
+  const deleted = cloneCatalog(migrated.draft);
+  const removed = deleted.photos.shift()!;
+  for (const space of Object.keys(deleted.galleries) as (keyof typeof deleted.galleries)[]) deleted.galleries[space] = deleted.galleries[space].filter(id => id !== removed.id);
+  await repository.saveDraft(deleted);
+  const withNewPhoto = cloneCatalog((await repository.loadState()).draft);
+  withNewPhoto.photos.push({ ...initial.draft.photos[0], id: 'backfilled-new', exportFilename: undefined, sourceFilename: undefined });
+  await repository.saveDraft(withNewPhoto);
+  expect((await repository.loadState()).draft.photos.find(photo => photo.id === 'backfilled-new')?.exportFilename).toBe(`photo-${String(nextNumber).padStart(4, '0')}.jpg`);
+});
+
 test('custom rooms persist and publish while existing sessions retain their original labels and rooms', async () => {
   const initial = await repository.loadState();
   await repository.saveSession(createSession(initial.catalog, 'kitchen', 'original'));
   const room = { id: 'office', labels: { ru: 'Кабинет', tk: 'Iş otagy' } };
   const draft = addDraftRoom(initial.draft, room);
-  draft.photos.push({ ...draft.photos[0], id: 'office-photo', room: room.id });
+  draft.photos.push({ ...draft.photos[0], id: 'office-photo', room: room.id, exportFilename: undefined, sourceFilename: undefined });
   draft.galleries.office.push('office-photo');
   await repository.saveDraft(draft);
   expect((await repository.loadState()).draft.rooms).toContainEqual(room);
@@ -125,7 +169,7 @@ test('publishing revisions cannot change an active session or release its photo 
 test('invalid publication retains the current catalog and incomplete library entries stay in draft', async () => {
   const initial = await repository.loadState();
   const draft = cloneCatalog(initial.draft);
-  const imported = { ...draft.photos[0], id: 'incomplete-import', styleId: '', paletteIds: [], materialIds: [], detailIds: [] };
+  const imported = { ...draft.photos[0], id: 'incomplete-import', exportFilename: undefined, sourceFilename: undefined, styleId: '', paletteIds: [], materialIds: [], detailIds: [] };
   draft.photos.push(imported);
   await repository.saveDraft(draft);
   const published = await repository.publishDraft();
@@ -174,4 +218,26 @@ test('corrupted published content is never silently replaced with demo data', as
   sqlite.__database.prepare('UPDATE catalog_revisions SET payload = ?').run('corrupt original');
   await expect(repository.loadState()).rejects.toThrow('CATALOG_DAMAGED');
   expect(sqlite.__database.prepare('SELECT payload FROM catalog_revisions').get()).toEqual({ payload: 'corrupt original' });
+});
+
+test('filenames persist through stale photo edits and reset never reuses deleted filename numbers', async () => {
+  const initial = await repository.loadState();
+  const stale = { ...initial.draft.photos[0], exportFilename: undefined, sourceFilename: undefined };
+  const draft = cloneCatalog(initial.draft);
+  draft.photos.push({ ...stale, id: 'new-photo', sourceFilename: 'bedroom.png' });
+  await repository.saveDraft(draft);
+  const afterImport = await repository.loadState();
+  expect(afterImport.draft.photos.at(-1)).toMatchObject({ exportFilename: 'bedroom.jpg', sourceFilename: 'bedroom.png' });
+  const edited = cloneCatalog(afterImport.draft);
+  edited.photos[0] = { ...stale, styleId: '' };
+  edited.photos.push({ ...stale, id: 'generated-photo' });
+  await repository.saveDraft(edited);
+  const beforeReset = await repository.loadState();
+  const usedNumber = beforeReset.draft.nextPhotoNumber!;
+  expect(beforeReset.draft.photos[0].exportFilename).toBe(initial.draft.photos[0].exportFilename);
+  const reset = await repository.resetDraft();
+  expect(reset.nextPhotoNumber).toBe(usedNumber);
+  reset.photos.push({ ...stale, id: 'after-reset' });
+  await repository.saveDraft(reset);
+  expect((await repository.loadState()).draft.photos.at(-1)?.exportFilename).toBe(`photo-${String(usedNumber).padStart(4, '0')}.jpg`);
 });

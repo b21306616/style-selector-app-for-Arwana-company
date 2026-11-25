@@ -4,6 +4,7 @@ import { createExport, pickImportImages, pickWorkbook, shareExport } from '../sr
 import { decodeWorkbook, encodeWorkbook } from '../src/storage/workbook';
 import { seedCatalog } from '../src/data/catalog';
 import { cloneCatalog } from '../src/domain/catalog';
+import { normalizePhotoFilenames } from '../src/domain/photo-filenames';
 import type { Photo } from '../src/domain/types';
 import { AppError } from '../src/domain/errors';
 
@@ -92,6 +93,36 @@ test('native export streams both bundled and local images and produces matching 
   expect(archive['photos/photo-0002.jpg']).toEqual(new Uint8Array([4, 5, 6]));
   expect(book.photos.map(row => row.value.filename)).toEqual(['photo-0001.jpg', 'photo-0002.jpg']);
   expect(mockWholeReads).toEqual([]);
+  expect(mockOpenHandles).toBe(0);
+});
+
+test('export keeps canonical JPEG filenames aligned with image bytes after reordering', async () => {
+  const original = cloneCatalog(seedCatalog);
+  original.photos = [
+    { ...original.photos[0], sourceFilename: 'room.png', image: { kind: 'local', file: 'one.jpg', thumbnail: 'one-thumb.jpg' } },
+    { ...original.photos[1], sourceFilename: 'room.jpg', image: { kind: 'local', file: 'two.jpg', thumbnail: 'two-thumb.jpg' } },
+  ];
+  const catalog = normalizePhotoFilenames(original);
+  catalog.photos.reverse();
+  mockPut('/images/one.jpg', new Uint8Array([1]));
+  mockPut('/images/two.jpg', new Uint8Array([2]));
+  const files = await createExport(catalog, jest.fn());
+  const archive = unzipSync(mockData(files.photos!));
+  const book = decodeWorkbook(mockData(files.workbook));
+  expect(book.photos.map(row => row.value.filename)).toEqual(['room.jpg', 'room-2.jpg']);
+  expect(archive['photos/room.jpg']).toEqual(new Uint8Array([2]));
+  expect(archive['photos/room-2.jpg']).toEqual(new Uint8Array([1]));
+  expect(mockOpenHandles).toBe(0);
+});
+
+test('an incomplete draft can be exported for completion without losing its image', async () => {
+  const catalog = cloneCatalog(seedCatalog);
+  catalog.photos = [{ ...catalog.photos[0], styleId: '', paletteIds: [], materialIds: [], detailIds: [] }];
+  mockPut('/bundled/sample.jpg', new Uint8Array([1, 2, 3]));
+  const files = await createExport(catalog, jest.fn());
+  const book = decodeWorkbook(mockData(files.workbook));
+  expect(book.issues.length).toBeGreaterThan(0);
+  expect(Object.keys(unzipSync(mockData(files.photos!)))).toEqual(['photos/photo-0001.jpg']);
   expect(mockOpenHandles).toBe(0);
 });
 

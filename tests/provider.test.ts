@@ -72,3 +72,17 @@ test('simultaneous rating callbacks cannot skip over the next photo', async () =
   expect(mockSaveSession).toHaveBeenCalledTimes(1);
   expect(result.current.session?.ratings).toEqual([{ photoId: seedCatalog.galleries.bathroom[0], choice: 'like' }]);
 });
+
+test('saved filename identity is retained when a stale editor omits filename fields', async () => {
+  const { result } = await renderHook(useApp, { wrapper: Wrapper });
+  await waitFor(() => expect(result.current.ready).toBe(true));
+  const stale = { ...result.current.draft!.photos[0] };
+  await act(async () => { await result.current.saveDraft(current => current); });
+  const filename = result.current.draft!.photos[0].exportFilename;
+  expect(filename).toBe('photo-0001.jpg');
+  await act(async () => {
+    await result.current.saveDraft(current => ({ ...current, photos: current.photos.map(item => item.id === stale.id ? { ...stale, styleId: '' } : item) }));
+  });
+  expect(result.current.draft!.photos[0].exportFilename).toBe(filename);
+  expect(mockSnapshot.draft.photos[0].exportFilename).toBe(filename);
+});

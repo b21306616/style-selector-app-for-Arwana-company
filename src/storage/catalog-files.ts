@@ -8,6 +8,7 @@ import { AppError } from '../domain/errors';
 import { filenameKey, TRANSFER_LIMITS, validFilename, type CatalogWorkbook } from '../domain/catalog-transfer';
 import { readZipIndex, updateCrc } from '../domain/zip';
 import type { Catalog, Photo } from '../domain/types';
+import { normalizePhotoFilenames } from '../domain/photo-filenames';
 import { discardPreparedPhotos, photoSource, preparePhotoFiles } from './images';
 
 export interface ExportFiles { workbook: string; photos?: string; directory: string }
@@ -160,6 +161,8 @@ export async function pickImportImages(onProgress: TransferProgress, signal?: Ab
 }
 
 export async function createExport(catalog: Catalog | undefined, onProgress: TransferProgress, signal?: AbortSignal): Promise<ExportFiles> {
+  // Freeze one filename mapping for the workbook and its companion JPEG archive.
+  const snapshot = catalog ? normalizePhotoFilenames(catalog) : undefined;
   const directory = tempDirectory();
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   try {
@@ -167,9 +170,9 @@ export async function createExport(catalog: Catalog | undefined, onProgress: Tra
     const workbook = new File(directory, catalog ? `arwana-${stamp}.xlsx` : 'arwana-template.xlsx');
     freeSpace(TRANSFER_LIMITS.workbookBytes);
     await yieldFrame();
-    const { encodeWorkbook, exportFilename } = workbookCodec();
-    await workbook.write(encodeWorkbook(catalog));
-    if (!catalog) return { workbook: workbook.uri, directory: directory.uri };
+    const { encodeWorkbook } = workbookCodec();
+    await workbook.write(encodeWorkbook(snapshot));
+    if (!snapshot) return { workbook: workbook.uri, directory: directory.uri };
     const archive = new File(directory, `arwana-photos-${stamp}.zip`);
     archive.create();
     const output = archive.open(FileMode.WriteOnly);
@@ -179,9 +182,9 @@ export async function createExport(catalog: Catalog | undefined, onProgress: Tra
     });
     let total = 0;
     try {
-      for (let index = 0; index < catalog.photos.length; index++) {
+      for (let index = 0; index < snapshot.photos.length; index++) {
         check(signal);
-        const source = photoSource(catalog.photos[index]);
+        const source = photoSource(snapshot.photos[index]);
         if (!source) throw new AppError('IMAGE_MISSING');
         let uri: string;
         if (typeof source === 'number') {
@@ -194,7 +197,7 @@ export async function createExport(catalog: Catalog | undefined, onProgress: Tra
         total += file.size;
         if (file.size > TRANSFER_LIMITS.imageBytes || total > TRANSFER_LIMITS.totalImageBytes) throw new AppError('TRANSFER_LIMIT');
         freeSpace(file.size);
-        const entry = new ZipPassThrough(`photos/${exportFilename(index)}`);
+        const entry = new ZipPassThrough(`photos/${snapshot.photos[index].exportFilename!}`);
         zip.add(entry);
         const input = file.open(FileMode.ReadOnly);
         try {
@@ -209,7 +212,7 @@ export async function createExport(catalog: Catalog | undefined, onProgress: Tra
           }
           if (!file.size) throw new AppError('IMAGE_MISSING');
         } finally { input.close(); }
-        onProgress(index + 1, catalog.photos.length);
+        onProgress(index + 1, snapshot.photos.length);
       }
       check(signal);
       zip.end();

@@ -1,4 +1,5 @@
 import type { Catalog, Labels, RoomDefinition } from './types';
+import { normalizePhotoFilenames } from './photo-filenames';
 
 export const defaultRooms: RoomDefinition[] = [
   { id: 'bathroom', labels: { tk: 'Wanna otagy', ru: 'Ванная' } },
@@ -7,7 +8,7 @@ export const defaultRooms: RoomDefinition[] = [
   { id: 'kitchen', labels: { tk: 'Aşhana', ru: 'Кухня' } },
 ];
 
-export const nameKey = (name: string) => name.trim().normalize('NFC').toLocaleLowerCase();
+export const nameKey = (name: string) => name.trim().normalize('NFC').toLocaleLowerCase('en-US');
 export const cleanLabels = (labels: Labels): Labels => ({ ru: labels.ru.trim().normalize('NFC'), tk: labels.tk.trim().normalize('NFC') });
 export const validLabels = (labels: Labels) => (['ru', 'tk'] as const).every(language => typeof labels?.[language] === 'string' && !!labels[language].trim() && labels[language].trim().length <= 100);
 export const sameName = (a: Labels, b: Labels) => (['ru', 'tk'] as const).some(language => nameKey(a[language]) === nameKey(b[language]));
@@ -17,6 +18,8 @@ export const hasRoom = (catalog: Pick<Catalog, 'rooms'>, id: string) => catalog.
 
 /** Only the absent property denotes a legacy payload. An explicit empty list stays empty. */
 export function normalizeCatalog(input: unknown): unknown {
-  if (!input || typeof input !== 'object' || Object.hasOwn(input, 'rooms')) return input;
-  return { ...input, rooms: defaultRooms.map(room => ({ ...room, labels: { ...room.labels } })) };
+  if (!input || typeof input !== 'object') return input;
+  const catalog = (Object.hasOwn(input, 'rooms') ? input : { ...input, rooms: defaultRooms.map(room => ({ ...room, labels: { ...room.labels } })) }) as Catalog;
+  if (!Array.isArray(catalog.photos) || catalog.photos.some(photo => !photo || typeof photo.id !== 'string')) return catalog;
+  return normalizePhotoFilenames(catalog);
 }

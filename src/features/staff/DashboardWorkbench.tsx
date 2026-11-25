@@ -20,7 +20,9 @@ export function DashboardWorkbench() {
   return <>
     <View style={styles.transferCard}>
       <Text accessibilityRole="header" style={typography.subheading}>{t('Excel bilen işlemek', 'Работа с Excel')}</Text>
-      <Text style={typography.small}>{t('Katalogy we aýratyn surat faýllaryny geçiriň. Üýtgeşmeler ilki garalama ýazylýar.', 'Переносите каталог и отдельные файлы фотографий. Изменения сначала сохраняются в черновик.')}</Text>
+      <Text style={typography.small}>{t('Russian we Turkmen sahypalarynda her suratyň maglumatlaryny degişli dilde dolduryň. Import üçin alty sütüniň hemmesi hökmany.', 'Заполните сведения о каждом фото на двух листах: Russian — по-русски, Turkmen — по-туркменски. Для импорта обязательны все шесть столбцов.')}</Text>
+      <Text style={typography.small}>Image filename · Room · Style · Palette · Material · Detail</Text>
+      <Text style={typography.small}>{t('Iki sahypada-da şol bir faýl atlaryny ulanyň. Bir stil ýazyň; palitranyň, materialyň we detalyň birnäçe adyny nokatly otur bilen aýryň. Terjimeleri şol bir tertipde ýazyň.', 'На обоих листах используйте одинаковые имена файлов. Укажите один стиль; несколько названий палитры, материалов и деталей разделяйте точкой с запятой. Переводы перечисляйте в том же порядке.')}</Text>
       <View style={[styles.actions, fontScale >= 1.5 && styles.stacked]}>
         <Button title={t('Excel-den import', 'Импорт из Excel')} variant="secondary" onPress={() => { setIssuePage(0); void w.chooseWorkbook(); }} disabled={w.busy} style={styles.action} />
         <Button title={t('Excel-e eksport', 'Экспорт в Excel')} variant="secondary" onPress={() => void w.exportDraft()} disabled={w.busy} style={styles.action} />
@@ -29,7 +31,7 @@ export function DashboardWorkbench() {
       {w.template && <Button title={t('Excel şablonyny saklamak / paýlaşmak', 'Сохранить / отправить шаблон Excel')} variant="secondary" onPress={() => void w.share(w.template!.workbook)} disabled={w.busy} />}
       {w.exports && <View style={styles.output}>
         <Text style={s.label}>{t('Eksport taýýar', 'Экспорт готов')}</Text>
-        <Text style={typography.small}>{t('Başga enjamda açmak üçin iki faýly hem saklaň.', 'Для переноса на другое устройство сохраните оба файла.')}</Text>
+        <Text style={typography.small}>{t('Başga enjamda açmak üçin iki faýly hem saklaň. Boş öýjükleri Excel-de dolduryp, soňra import ediň. Kitap surat maglumatlaryny we suratlary geçirýär; ulanylmaýan otaglar, tegler we toplumlaryň aýratyn tertibi saklanmaýar.', 'Для переноса на другое устройство сохраните оба файла. Пустые ячейки необходимо заполнить в Excel перед импортом. Книга переносит описания и изображения; неиспользуемые комнаты, теги и отдельный порядок подборок не сохраняются.')}</Text>
         <View style={[styles.actions, fontScale >= 1.5 && styles.stacked]}>
           <Button title={t('Excel faýlyny saklamak / paýlaşmak', 'Сохранить / отправить Excel')} variant="secondary" onPress={() => void w.share(w.exports!.workbook)} disabled={w.busy} style={styles.action} />
           {w.exports.photos && <Button title={t('Surat ZIP-ini saklamak / paýlaşmak', 'Сохранить / отправить ZIP с фото')} variant="secondary" onPress={() => void w.share(w.exports!.photos!, true)} disabled={w.busy} style={styles.action} />}
@@ -41,7 +43,7 @@ export function DashboardWorkbench() {
     {w.book && w.review && <View style={s.card}>
       <Text accessibilityRole="header" style={typography.subheading}>{t('Importy barlamak', 'Проверка импорта')}</Text>
       <Text style={typography.small}>{w.book.name}</Text>
-      <Text style={typography.small}>{t('Täze suratlar üçin atlary Excel-e gabat gelýän faýllary saýlaň. Bar bolan ID-ler suraty saklaýar, saýlanan faýl ony çalyşýar.', 'Для новых фото выберите файлы с именами из Excel. Существующие ID сохраняют свои изображения; выбранный файл заменяет изображение.')}</Text>
+      <Text style={typography.small}>{t('Täze suratlar üçin atlary Excel-e gabat gelýän faýllary saýlaň. Bar bolan faýl ady şol suraty täzeleýär; täze faýl saýlanmasa, öňki surat saklanýar. Üýtgeşmeler ilki garalama ýazylýar.', 'Для новых фото выберите файлы с именами из Excel. Совпадающее имя обновляет существующее фото; если новый файл не выбран, изображение сохраняется. Изменения сначала сохраняются в черновик.')}</Text>
       <Button title={t('ZIP ýa-da suratlary saýlamak', 'Выбрать ZIP или фотографии')} variant="secondary" onPress={() => void w.chooseImages()} disabled={w.busy} />
       <Text style={typography.small}>{t('Taýýar suratlar', 'Подготовлено фотографий')}: {w.images.size}</Text>
       <View style={s.row}>
@@ -49,14 +51,14 @@ export function DashboardWorkbench() {
         <Chip label={t('Garalamany çalyşmak', 'Заменить черновик')} selected={w.mode === 'replace'} onPress={() => w.setMode('replace')} disabled={w.busy} />
       </View>
       <Text style={typography.small}>{w.mode === 'merge'
-        ? t('Ýok ýazgylar saklanýar. Excel-däki tertip öňe geçýär, beýleki suratlar yzyna goşulýar.', 'Отсутствующие записи сохраняются. Сначала идёт порядок из Excel, затем остальные фото подборки.')
-        : t('Garalamada diňe Excel-däki ýazgylar galar. Çap edilen katalog üýtgemez.', 'В черновике останутся только записи из Excel. Опубликованный каталог сохранится.')}</Text>
+        ? t('Kitapda ýok ýazgylar we öňki toplumlaryň tertibi saklanýar. Täze suratlar diňe öz otagynyň toplumyna, Russian sahypasynyň tertibinde goşulýar.', 'Записи вне книги и порядок существующих подборок сохраняются. Новые фото добавляются только в подборку своей комнаты, в порядке листа Russian.')
+        : t('Diňe Excel-däki ýazgylar galar. Otag toplumlary Russian sahypasynyň tertibinde dörediler; «Bütin jaý» boş bolar. Çap edilen katalog üýtgemez.', 'Останутся только записи из Excel. Комнатные подборки будут созданы в порядке листа Russian; «Весь дом» станет пустым. Опубликованный каталог сохранится.')}</Text>
       <View style={styles.stats}>
         {[ [t('Goşular', 'Добавится'), w.review.added], [t('Täzelener', 'Обновится'), w.review.updated], [t('Aýrylar', 'Удалится'), w.review.removed] ].map(([label, count]) => <View style={styles.stat} key={label}><Text style={styles.statNumber}>{count}</Text><Text style={typography.small}>{label}</Text></View>)}
       </View>
       <Text style={typography.small}>{t('Netije', 'После импорта')}: {w.review.catalog.photos.length} {t('surat', 'фото')} · {w.review.catalog.terms.length} {t('termin', 'терминов')}</Text>
-      {catalogSpaces(w.review.catalog).map(space => <View key={space} style={styles.summaryRow}><Text style={[typography.small, { flex: 1 }]}>{spaceLabel(space, language, w.review!.catalog.rooms)}</Text><Text style={s.label}>{draft.galleries[space].length} → {w.review!.catalog.galleries[space].length}</Text></View>)}
-      {w.review.warnings > 0 && <Text style={typography.small}>{t('Çap etmezden ozal tegleri tamamlamak gerek. Ähli meseleler çap ediş synynda görkeziler.', 'Перед публикацией потребуется дополнить теги. Все замечания будут доступны на экране проверки публикации.')}</Text>}
+      {catalogSpaces(w.review.catalog).map(space => <View key={space} style={styles.summaryRow}><Text style={[typography.small, { flex: 1 }]}>{spaceLabel(space, language, w.review!.catalog.rooms)}</Text><Text style={s.label}>{draft.galleries[space]?.length ?? 0} → {w.review!.catalog.galleries[space].length}</Text></View>)}
+      {w.review.issues.length === 0 && w.review.warnings > 0 && <Text style={typography.small}>{t('Çap etmezden ozal tegleri tamamlamak gerek. Ähli meseleler çap ediş synynda görkeziler.', 'Перед публикацией потребуется дополнить теги. Все замечания будут доступны на экране проверки публикации.')}</Text>}
       {w.review.issues.length > 0 && <View style={styles.issues} accessibilityLiveRegion="polite">
         <Text style={s.label}>{t('Düzetmeli meseleler', 'Исправьте ошибки')}: {w.review.issues.length}</Text>
         {w.review.issues.slice(page * 25, (page + 1) * 25).map((issue, index) => <Text key={`${page}-${index}`} style={styles.issue}>{issue.sheet}{issue.row ? ` · ${t('setir', 'строка')} ${issue.row}` : ''}{issue.column ? ` · ${issue.column}` : ''}: {issue.labels[language]}</Text>)}

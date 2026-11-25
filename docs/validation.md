@@ -2,6 +2,12 @@
 
 Implementation checks were run on Windows with Node 26.13.1, Expo SDK 58, and React Native 0.88.1 on 17 November 2026. Android and iOS are the target platforms. This record distinguishes automated checks, user-confirmed device checks, and the acceptance work still pending.
 
+## Simplified Excel format — 25 November 2026
+
+The transfer format now uses only `Russian` and `Turkmen` sheets with the six readable columns shown in the staff guide. All six values are required for import in both languages; incomplete exports remain available for completion. Filename matching replaces workbook IDs, new imported photos enter their room gallery only, and replacement leaves Whole House empty. Dashboard guidance and the manual acceptance walkthrough describe these semantics.
+
+Before implementation, lint and typecheck passed and the three transfer/dashboard suites passed all 50 existing tests. Following the workbook implementation and strict validation fixes, `npx tsc --noEmit`, `npx expo lint src tests` (with `EXPO_NO_TELEMETRY=1`), `npm run validate:catalog`, and `npm test` (`jest --runInBand`) passed across all 19 suites and 184 tests. Those tests verify exact `['Russian', 'Turkmen']` visible sheet order and strict `INVALID_WORKBOOK` rejection for legacy v1/v2, swapped, missing, extra, hidden, and non-ZIP workbooks; empty template widths (`!cols`) and autofilters (`!autofilter`); reordered language sheets; blank rows at high physical locations; every required cell without duplicate error stacking or false repeated-tag errors; early 5,000-term enforcement; persisted legacy filename backfill; filename stability after edits, deletion, and restart; JPEG collisions; workbook/ZIP filename agreement; merge and replace galleries; archive safeguards at the 500-photo limit; draft persistence; and updated Russian/Turkmen dashboard guidance. Physical Android/iOS picker, share-sheet, Excel-editing, and large-transfer acceptance remain pending; see [device-preview.md](device-preview.md).
+
 ## Staff dashboard and Excel update — 22 November 2026
 
 The dashboard now supports direct photo/vocabulary entry, a bilingual Excel template, merge/replace import review, and paired workbook/photo-ZIP exports. The transfer contract is tested with 500 photos. Automated service tests use mocked native file handles and pickers; their bounded-read assertions do not measure physical-device peak memory.

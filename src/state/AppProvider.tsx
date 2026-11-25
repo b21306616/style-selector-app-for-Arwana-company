@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { cloneCatalog } from '../domain/catalog';
+import { normalizePhotoFilenames } from '../domain/photo-filenames';
 import { AppError, errorCode } from '../domain/errors';
 import { createSession, rateSession, undoSession } from '../domain/session';
 import type { Catalog, Choice, Language, Session, Space } from '../domain/types';
@@ -139,7 +140,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
     if (!current) throw new AppError('CATALOG_DAMAGED');
     // Long-running imports must merge into the latest draft, not their captured snapshot.
     // The updater receives a copy so it cannot mutate visible state before persistence succeeds.
-    const saved = cloneCatalog(typeof catalog === 'function' ? catalog(cloneCatalog(current)) : catalog);
+    const saved = normalizePhotoFilenames(cloneCatalog(typeof catalog === 'function' ? catalog(cloneCatalog(current)) : catalog), current);
     await repository.saveDraft(saved);
     apply({ draft: saved });
   }), [apply, mutate]);

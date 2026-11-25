@@ -3,6 +3,7 @@ import { seedCatalog } from '../src/data/catalog';
 import { addDraftRoom, cloneCatalog, removeDraftOptions, validateCatalog } from '../src/domain/catalog';
 import { addDraftPhoto } from '../src/domain/catalog-transfer';
 import { defaultRooms, normalizeCatalog } from '../src/domain/rooms';
+import { normalizePhotoFilenames } from '../src/domain/photo-filenames';
 import { spaceLabel } from '../src/ui/copy';
 
 const office = { id: 'office', labels: { ru: 'Кабинет', tk: 'Iş otagy' } };
@@ -57,13 +58,13 @@ test('unused built-in rooms can be removed, including the final room', () => {
   expect(empty.rooms).toEqual([]);
   expect(empty.galleries).toEqual({ whole_house: [] });
   expect(validateCatalog(empty)).toEqual([]);
-  expect(normalizeCatalog(empty)).toBe(empty);
+  expect(normalizeCatalog(empty)).toEqual(normalizePhotoFilenames(empty));
   expect(() => addDraftPhoto(empty, seedCatalog.photos[0], [])).toThrow('ROOM_REQUIRED');
 });
 
 test('legacy payload normalization preserves IDs, while malformed new definitions are rejected', () => {
   const { rooms: _rooms, ...legacy } = seedCatalog;
-  expect(normalizeCatalog(legacy)).toEqual(seedCatalog);
+  expect(normalizeCatalog(legacy)).toEqual(normalizePhotoFilenames(seedCatalog));
   expect(validateCatalog({ ...seedCatalog, rooms: null })).toContainEqual(expect.objectContaining({ code: 'STRUCTURE' }));
   expect(validateCatalog({ ...seedCatalog, rooms: [...seedCatalog.rooms, office, office] })).toContainEqual(expect.objectContaining({ code: 'ROOM_DEFINITION' }));
 });

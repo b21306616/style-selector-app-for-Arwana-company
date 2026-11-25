@@ -31,7 +31,7 @@ export function DraftEntryCard() {
         <Text style={typography.small}>{t('Üýtgeşmeler çap edilenden soň müşderilere görüner.', 'Клиенты увидят изменения после публикации.')}</Text>
       </View>
       <View testID="draft-photo-editor" style={[styles.editor, split && styles.split]}>
-        <View style={[styles.imageColumn, split && styles.imageSplit]}>
+        <View testID="draft-photo-section" style={[styles.imageColumn, !split && styles.sectionDivider, split && styles.imageSplit]}>
           <Text accessibilityRole="header" style={styles.sectionTitle}>{t('Surat', 'Фотография')}</Text>
           <Pressable testID="draft-photo-picker" accessibilityRole="button" accessibilityLabel={w.photo ? t('Suraty çalşyrmak', 'Заменить фотографию') : t('Interýer suratyny goşuň', 'Добавьте фото интерьера')} disabled={w.busy} onPress={() => void w.choosePhoto()}
             style={({ pressed }) => [styles.photoPicker, w.busy && styles.photoPickerDisabled, pressed && styles.photoPickerPressed]}>
@@ -63,7 +63,7 @@ export function DraftEntryCard() {
             </> : null} />
         </View>
       </View>
-      <View style={styles.footer}>
+      <View testID="draft-entry-footer" style={styles.footer}>
         <Button title={t('Suraty garalama ýazdyrmak', 'Сохранить фото в черновик')} disabled={w.busy || !w.photo || !hasRoom(draft, w.fields.room)} onPress={() => void w.savePhoto()} />
         <Button title={t('Formany arassalamak', 'Очистить форму')} variant="ghost" disabled={w.busy || !w.dirty} onPress={() => setDiscard(true)} />
       </View>
@@ -80,5 +80,6 @@ const styles = StyleSheet.create({
   placeholder: { minHeight: 176, padding: 20, alignItems: 'center', justifyContent: 'center', gap: 8, backgroundColor: colors.greenSoft, borderRadius: 16 },
   photoIcon: { padding: 10, backgroundColor: colors.surface, borderRadius: 16, marginBottom: 4 }, placeholderTitle: { ...typography.body, color: colors.ink, fontWeight: '600', textAlign: 'center' }, placeholderCopy: { ...typography.small, textAlign: 'center' },
   sectionTitle: { ...typography.body, color: colors.ink, fontWeight: '600' },
-  footer: { paddingTop: 20, gap: 12, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  sectionDivider: { paddingBottom: 20, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  footer: { gap: 12 },
 });

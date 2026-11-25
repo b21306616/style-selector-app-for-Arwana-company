@@ -1,7 +1,7 @@
 import { beforeEach, expect, jest, test } from '@jest/globals';
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
 import { useLayoutEffect } from 'react';
-import { Text, useWindowDimensions } from 'react-native';
+import { StyleSheet, Text, useWindowDimensions } from 'react-native';
 import { DashboardWorkbench } from '../src/features/staff/DashboardWorkbench';
 import { StaffWorkspaceProvider, useStaffWorkspace } from '../src/features/staff/workspace-context';
 import { useApp, type AppContextValue } from '../src/state/AppProvider';
@@ -115,6 +115,9 @@ test('draft entry omits collection controls and helper copy', async () => {
   expect(screen.queryByText('Необязательно. Фото можно добавить в подборку позже.')).toBeNull();
   expect(screen.queryByText('Выберите комнату, чтобы сохранить фото.')).toBeNull();
   expect(screen.queryByText('Теги можно заполнить позже. Для публикации нужны стиль и хотя бы один тег каждой категории.')).toBeNull();
+  expect(screen.getByTestId('draft-photo-section')).toHaveStyle({ borderBottomWidth: StyleSheet.hairlineWidth, paddingBottom: 20 });
+  expect(screen.getByTestId('draft-characteristics-section')).toHaveStyle({ borderTopWidth: StyleSheet.hairlineWidth, paddingTop: 20 });
+  expect(screen.getByTestId('draft-entry-footer')).not.toHaveStyle({ borderTopWidth: StyleSheet.hairlineWidth });
 });
 
 test('a failed term save stays in the sheet, and unfinished labels and choices survive a lock', async () => {

@@ -101,7 +101,7 @@ function CompactPhotoMetadataFields({ value, terms, rooms, photos = [], language
         onChange={ids => onChange({ ...value, room: ids[0] ?? '' })} onVisibilityChange={onPickerVisibilityChange} />
       {termField('style')}
     </View>
-    <View style={[compact.section, compact.divided]}>
+    <View testID="draft-characteristics-section" style={[compact.section, compact.divided]}>
       <Text accessibilityRole="header" style={compact.heading}>{tx(language, 'Aýratynlyklar', 'Характеристики')}</Text>
       <Text style={typography.small}>{tx(language, 'Her meýdanda birnäçe wariant saýlap bilersiňiz.', 'В каждом поле можно выбрать несколько вариантов.')}</Text>
       {termField('palette')}{termField('material')}{termField('detail')}

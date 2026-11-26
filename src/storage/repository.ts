@@ -203,12 +203,12 @@ export function clearSession(): Promise<void> {
   });
 }
 
-export function saveDraft(draft: Catalog): Promise<void> {
+export function saveDraft(draft: Catalog, options?: { replace?: boolean }): Promise<void> {
   return serialized(async () => {
     const db = await database();
     // Draft content can be incomplete; publication performs the strict validation.
     const row = await db.getFirstAsync<{ payload: string }>('SELECT payload FROM catalog_draft WHERE singleton = 1');
-    const previous = row ? parseDraft(row.payload) : undefined;
+    const previous = options?.replace ? undefined : row ? parseDraft(row.payload) : undefined;
     const saved = normalizePhotoFilenames(draft, previous);
     await db.runAsync('INSERT OR REPLACE INTO catalog_draft (singleton, payload) VALUES (1, ?)', JSON.stringify(saved));
   });

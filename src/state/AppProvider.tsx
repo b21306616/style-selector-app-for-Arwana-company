@@ -24,7 +24,7 @@ export interface AppContextValue extends AppState {
   rate(choice: Choice): Promise<void>;
   undo(): Promise<void>;
   clearSession(): Promise<void>;
-  saveDraft(catalog: Catalog | ((current: Catalog) => Catalog)): Promise<void>;
+  saveDraft(catalog: Catalog | ((current: Catalog) => Catalog), options?: { replace?: boolean }): Promise<void>;
   publishDraft(): Promise<void>;
   resetDraft(): Promise<void>;
   refresh(): Promise<void>;
@@ -135,13 +135,17 @@ export function AppProvider({ children }: { children: ReactNode }) {
     apply({ session: null });
   }), [apply, mutate]);
 
-  const saveDraft = useCallback((catalog: Catalog | ((current: Catalog) => Catalog)) => mutate(async () => {
+  const saveDraft = useCallback((catalog: Catalog | ((current: Catalog) => Catalog), options?: { replace?: boolean }) => mutate(async () => {
     const current = stateRef.current.draft;
     if (!current) throw new AppError('CATALOG_DAMAGED');
-    // Long-running imports must merge into the latest draft, not their captured snapshot.
+    // The updater receives the latest snapshot, so a reviewed replacement cannot
+    // overwrite edits made while the import was being prepared.
     // The updater receives a copy so it cannot mutate visible state before persistence succeeds.
-    const saved = normalizePhotoFilenames(cloneCatalog(typeof catalog === 'function' ? catalog(cloneCatalog(current)) : catalog), current);
-    await repository.saveDraft(saved);
+    const saved = normalizePhotoFilenames(
+      cloneCatalog(typeof catalog === 'function' ? catalog(cloneCatalog(current)) : catalog),
+      options?.replace ? undefined : current,
+    );
+    await repository.saveDraft(saved, options);
     apply({ draft: saved });
   }), [apply, mutate]);
 

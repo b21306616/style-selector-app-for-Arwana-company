@@ -6,7 +6,6 @@ import { AppError } from './errors';
 
 export { filenameKey, validFilename } from './photo-filenames';
 export const TRANSFER_LIMITS = { photos: 500, terms: 5000, workbookBytes: 10 * 1024 * 1024, xmlBytes: 50 * 1024 * 1024, imageBytes: 50 * 1024 * 1024, totalImageBytes: 1024 * 1024 * 1024 } as const;
-export type ImportMode = 'merge' | 'replace';
 export interface WorkbookPhoto {
   filename: string;
   room: Labels;
@@ -24,19 +23,16 @@ export interface ImportPreview {
   issues: TransferIssue[];
   warnings: number;
   added: number;
-  updated: number;
   removed: number;
 }
 
 export const draftFingerprint = (catalog: Catalog) => JSON.stringify(catalog);
-const samePhoto = (a: Photo, b: Photo) => a.id === b.id && a.room === b.room && a.styleId === b.styleId && a.width === b.width && a.height === b.height && a.sample === b.sample &&
-  JSON.stringify(a.image) === JSON.stringify(b.image) && (['paletteIds', 'materialIds', 'detailIds'] as const).every(key => JSON.stringify(a[key]) === JSON.stringify(b[key]));
 export function transferIssue(sheet: string, row: number, ru: string, tk: string, column?: string): TransferIssue {
   return { sheet, row, column, labels: { ru, tk } };
 }
 
 /** Pure review: every generated identifier and filename is stable for the same inputs. */
-export function previewImport(input: Catalog, workbook: CatalogWorkbook, images: ReadonlyMap<string, Photo>, mode: ImportMode): ImportPreview {
+export function previewImport(input: Catalog, workbook: CatalogWorkbook, images: ReadonlyMap<string, Photo>): ImportPreview {
   const current = normalizePhotoFilenames(input);
   const issues = [...workbook.issues];
   const recorded = new Set(workbook.issues.map(issue => `${issue.sheet}:${issue.row}:${issue.column ?? ''}`));
@@ -44,13 +40,20 @@ export function previewImport(input: Catalog, workbook: CatalogWorkbook, images:
   const problem = (entry: WorkbookRow<WorkbookPhoto>, column: string, ru: string, tk: string, language: Language = 'ru') => {
     issues.push(transferIssue(language === 'ru' ? 'Russian' : 'Turkmen', entry.rows[language], ru, tk, column));
   };
-  const next = cloneCatalog(current);
-  if (mode === 'replace') {
-    next.rooms = []; next.terms = []; next.photos = []; next.galleries = { whole_house: [] };
-  }
-  const rooms = new Map(next.rooms.map(room => [room.id, room]));
-  const terms = new Map(next.terms.map(term => [term.id, term]));
-  const photos = new Map(next.photos.map(photo => [photo.id, photo]));
+  // Import is a complete draft replacement. The current draft is only used below
+  // to find an image file for a workbook filename that staff have not reselected.
+  const next: Catalog = {
+    ...cloneCatalog(current),
+    nextPhotoNumber: 1,
+    rooms: [],
+    terms: [],
+    photos: [],
+    galleries: { whole_house: [] },
+    sample: false,
+  };
+  const rooms = new Map<string, RoomDefinition>();
+  const terms = new Map<string, Term>();
+  const photos = new Map<string, Photo>();
   const occupied = new Set([...current.rooms, ...current.terms, ...current.photos].map(item => item.id));
   const nextIds = new Map<string, number>();
   function allocate(prefix: string) {
@@ -71,8 +74,6 @@ export function previewImport(input: Catalog, workbook: CatalogWorkbook, images:
       const ids = names.get(labelKey) ?? new Set<string>(); ids.add(id); names.set(labelKey, ids);
     }
   }
-  current.rooms.forEach(room => indexNames('room', room.id, room.labels));
-  current.terms.forEach(term => indexNames(term.kind, term.id, term.labels));
   function resolve(kind: 'room' | TermKind, labels: Labels, entry: WorkbookRow<WorkbookPhoto>, column: string): string {
     const cleaned = cleanLabels(labels);
     if (!validLabels(cleaned)) {
@@ -119,7 +120,7 @@ export function previewImport(input: Catalog, workbook: CatalogWorkbook, images:
   });
   const seenNames = new Set<string>();
   const seenPhotos = new Set<string>();
-  const incomingPhotos: { photo: Photo; old?: Photo }[] = [];
+  const incomingPhotos: Photo[] = [];
   for (const entry of workbook.photos) {
     const row = entry.value;
     if (!validFilename(row.filename)) {
@@ -153,46 +154,32 @@ export function previewImport(input: Catalog, workbook: CatalogWorkbook, images:
       problem(entry, 'Image filename', `Выберите файл: ${row.filename}`, `Faýly saýlaň: ${row.filename}`);
       continue;
     }
-    const id = old?.id ?? (occupied.has(source.id) ? allocate('excel-photo') : source.id);
-    occupied.add(id);
+    const id = allocate('excel-photo');
     const photo: Photo = {
       id, room, styleId, paletteIds, materialIds, detailIds,
-      image: source.image, width: source.width, height: source.height, sample: old?.sample ?? false,
-      ...(old ? { exportFilename: old.exportFilename, sourceFilename: old.sourceFilename } : { sourceFilename: row.filename }),
+      image: source.image, width: source.width, height: source.height, sample: false,
+      sourceFilename: row.filename,
     };
-    photos.set(id, photo); incomingPhotos.push({ photo, old });
+    photos.set(id, photo); incomingPhotos.push(photo);
   }
-  if (!workbook.photos.length && !issues.length) issues.push(transferIssue('Russian', 2, 'В книге нет фотографий для импорта.', 'Kitapda import etmek üçin surat ýok.'));
   next.rooms = [...rooms.values()]; next.terms = [...terms.values()]; next.photos = [...photos.values()];
   if (next.rooms.length > TRANSFER_LIMITS.terms || next.terms.length > TRANSFER_LIMITS.terms || next.photos.length > TRANSFER_LIMITS.photos) {
     issues.push(transferIssue('Russian', 0, 'Превышен лимит: 500 фотографий или 5 000 названий.', 'Çäkden geçildi: 500 surat ýa-da 5 000 at.'));
   }
 
-  // Merge retains selections; replacement derives room galleries from Russian order.
+  // Room galleries follow Russian-sheet order. Whole House starts empty.
   const spaces = catalogSpaces(next);
-  for (const space of spaces) next.galleries[space] = (next.galleries[space] ?? []).filter(id => photos.has(id) && (space === 'whole_house' || photos.get(id)!.room === space));
-  for (const { photo, old } of incomingPhotos) {
-    const selectedBefore = old && current.galleries[old.room]?.includes(old.id);
-    if (photo.room && (mode === 'replace' || !old || (old.room !== photo.room && selectedBefore))) {
+  for (const space of spaces) next.galleries[space] ??= [];
+  for (const photo of incomingPhotos) {
+    if (photo.room) {
       const gallery = next.galleries[photo.room];
       if (gallery && !gallery.includes(photo.id)) gallery.push(photo.id);
     }
   }
-  next.sample = next.photos.some(photo => photo.sample && spaces.some(space => next.galleries[space].includes(photo.id)));
-  let added = 0; let updated = 0; let removed = 0;
-  function count<T extends { id: string }>(before: T[], after: T[], same: (a: T, b: T) => boolean) {
-    const previous = new Map(before.map(item => [item.id, item]));
-    for (const item of after) {
-      const old = previous.get(item.id);
-      if (!old) added++; else if (!same(old, item)) updated++;
-      previous.delete(item.id);
-    }
-    removed += previous.size;
-  }
-  const sameLabels = (a: RoomDefinition, b: RoomDefinition) => a.labels.ru === b.labels.ru && a.labels.tk === b.labels.tk;
-  count(current.rooms, next.rooms, sameLabels); count(current.terms, next.terms, sameLabels); count(current.photos, next.photos, samePhoto);
-  const catalog = normalizePhotoFilenames(next, current, workbook.photos.map(entry => entry.value.filename));
-  return { base: draftFingerprint(input), catalog, issues, warnings: validateCatalog(catalog).length, added, updated, removed };
+  const added = next.rooms.length + next.terms.length + next.photos.length;
+  const removed = current.rooms.length + current.terms.length + current.photos.length;
+  const catalog = normalizePhotoFilenames(next, undefined, workbook.photos.map(entry => entry.value.filename));
+  return { base: draftFingerprint(input), catalog, issues, warnings: validateCatalog(catalog).length, added, removed };
 }
 
 export function addDraftPhoto(current: Catalog, photo: Photo, spaces: Space[]): Catalog {

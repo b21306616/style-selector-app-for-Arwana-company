@@ -201,7 +201,6 @@ test('photo form and picker results survive a lock while applying changes still 
 test('replacement requires confirmation and refuses a draft changed after the review', async () => {
   await render(<StaffWorkspaceProvider><Probe /></StaffWorkspaceProvider>);
   await fireEvent.press(screen.getByRole('button', { name: 'Импорт из Excel' }));
-  await fireEvent.press(screen.getByRole('button', { name: 'Заменить черновик' }));
   await fireEvent.press(screen.getByRole('button', { name: 'Сохранить импорт в черновик' }));
   expect(app.saveDraft).not.toHaveBeenCalled();
   expect(screen.getByText('Заменить весь черновик?')).toBeOnTheScreen();
@@ -211,6 +210,15 @@ test('replacement requires confirmation and refuses a draft changed after the re
   expect(controller.error).toMatchObject({ code: 'STALE_DRAFT' });
   expect(controller.confirmReplace).toBe(false);
   expect(controller.book).not.toBeNull();
+});
+
+test('Excel import has no merge control and saves through the replacement path', async () => {
+  await render(<StaffWorkspaceProvider><Probe /></StaffWorkspaceProvider>);
+  await fireEvent.press(screen.getByRole('button', { name: 'Импорт из Excel' }));
+  expect(screen.queryByRole('button', { name: 'Объединить' })).toBeNull();
+  await fireEvent.press(screen.getByRole('button', { name: 'Сохранить импорт в черновик' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Заменить черновик' }));
+  expect(app.saveDraft).toHaveBeenLastCalledWith(expect.any(Function), { replace: true });
 });
 
 test('a failed import save releases its uncommitted images and preserves the old catalog', async () => {
@@ -250,8 +258,8 @@ test('Excel guidance describes both language sheets and six required columns', a
   expect(screen.getByText(/Для импорта обязательны все шесть столбцов/)).toBeOnTheScreen();
   expect(screen.getByText('Image filename · Room · Style · Palette · Material · Detail')).toBeOnTheScreen();
   await fireEvent.press(screen.getByRole('button', { name: 'Импорт из Excel' }));
-  expect(screen.getByText(/Совпадающее имя обновляет существующее фото/)).toBeOnTheScreen();
-  expect(screen.getByText(/Новые фото добавляются только в подборку своей комнаты/)).toBeOnTheScreen();
+  expect(screen.getByText(/Совпадающее имя использует сохранённое изображение/)).toBeOnTheScreen();
+  expect(screen.getByText(/Все записи вне Excel будут удалены/)).toBeOnTheScreen();
 });
 
 test('unsupported workbook guidance directs staff to download the new template without opening import review', async () => {

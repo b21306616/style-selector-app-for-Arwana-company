@@ -241,3 +241,23 @@ test('filenames persist through stale photo edits and reset never reuses deleted
   await repository.saveDraft(reset);
   expect((await repository.loadState()).draft.photos.at(-1)?.exportFilename).toBe(`photo-${String(usedNumber).padStart(4, '0')}.jpg`);
 });
+
+test('replacement saves reset draft content and filename allocation history', async () => {
+  const initial = await repository.loadState();
+  const source = initial.draft.photos[0];
+  const replacement: Catalog = {
+    ...cloneCatalog(initial.draft),
+    nextPhotoNumber: 1,
+    rooms: [cloneCatalog(initial.draft).rooms.find(room => room.id === source.room)!],
+    terms: cloneCatalog(initial.draft).terms.filter(term => [source.styleId, ...source.paletteIds, ...source.materialIds, ...source.detailIds].includes(term.id)),
+    photos: [{ ...source, id: 'replacement-photo', exportFilename: undefined, sourceFilename: undefined, sample: false }],
+    galleries: { whole_house: [], [source.room]: ['replacement-photo'] },
+    sample: false,
+  };
+  await repository.saveDraft(replacement, { replace: true });
+  const saved = (await repository.loadState()).draft;
+  expect(saved.photos).toHaveLength(1);
+  expect(saved.photos[0]).toMatchObject({ id: 'replacement-photo', exportFilename: 'photo-0001.jpg', sample: false });
+  expect(saved.nextPhotoNumber).toBe(2);
+  expect(saved.galleries.whole_house).toEqual([]);
+});

@@ -1,9 +1,10 @@
 import { Asset } from 'expo-asset';
 import * as Crypto from 'expo-crypto';
 import * as DocumentPicker from 'expo-document-picker';
-import { Directory, File, FileMode, Paths, type FileHandle } from 'expo-file-system';
+import { Directory, File, FileMode, Paths, type FileHandle, type PickSingleFileResult } from 'expo-file-system';
 import * as Sharing from 'expo-sharing';
 import { Unzip, UnzipInflate, Zip, ZipPassThrough } from 'fflate';
+import { Platform } from 'react-native';
 import { AppError } from '../domain/errors';
 import { filenameKey, TRANSFER_LIMITS, validFilename, type CatalogWorkbook } from '../domain/catalog-transfer';
 import { readZipIndex, updateCrc } from '../domain/zip';
@@ -14,6 +15,7 @@ import { discardPreparedPhotos, photoSource, preparePhotoFiles } from './images'
 export interface ExportFiles { workbook: string; photos?: string; directory: string }
 export type TransferProgress = (done: number, total: number) => void;
 const yieldFrame = () => new Promise<void>(resolve => setTimeout(resolve, 0));
+const workbookMimeTypes = ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/octet-stream'];
 // Delay spreadsheet initialization until a staff transfer actually needs it.
 function workbookCodec(): typeof import('./workbook') {
   // eslint-disable-next-line @typescript-eslint/no-require-imports -- Metro can initialize this large module on the first transfer instead of staff entry.
@@ -29,20 +31,27 @@ function tempDirectory() {
 function removeDirectory(directory: Directory) { try { if (directory.exists) directory.delete(); } catch { /* The OS can reclaim the cache. */ } }
 
 export async function pickWorkbook(signal?: AbortSignal): Promise<{ name: string; workbook: CatalogWorkbook } | null> {
-  const result = await DocumentPicker.getDocumentAsync({ type: ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/octet-stream'], copyToCacheDirectory: true });
+  let result: PickSingleFileResult;
+  try {
+    result = await File.pickFileAsync({ mimeTypes: workbookMimeTypes });
+  } catch {
+    throw new AppError('WORKBOOK_READ_FAILED');
+  }
   check(signal);
   if (result.canceled) return null;
-  const asset = result.assets[0];
-  if (!/\.xlsx$/i.test(asset.name)) throw new AppError('INVALID_WORKBOOK');
-  const file = new File(asset.uri);
+  const file = result.result;
+  if (!/\.xlsx$/i.test(file.name)) throw new AppError('INVALID_WORKBOOK');
   if (file.size > TRANSFER_LIMITS.workbookBytes) throw new AppError('TRANSFER_LIMIT');
-  const bytes = await file.bytes();
+  let bytes: Uint8Array;
+  try { bytes = await file.bytes(); }
+  catch { throw new AppError('WORKBOOK_READ_FAILED', file.name); }
   await yieldFrame();
   check(signal);
-  const { decodeWorkbook } = workbookCodec();
-  const workbook = decodeWorkbook(bytes);
+  let workbook: CatalogWorkbook;
+  try { workbook = workbookCodec().decodeWorkbook(bytes); }
+  catch (error) { throw error instanceof AppError ? error : new AppError('WORKBOOK_READ_FAILED', file.name); }
   check(signal);
-  return { name: asset.name, workbook };
+  return { name: file.name, workbook };
 }
 
 async function extractImages(archive: File, directory: Directory, remainingBytes: number, signal?: AbortSignal): Promise<{ name: string; file: File }[]> {
@@ -82,7 +91,7 @@ async function extractImages(archive: File, directory: Directory, remainingBytes
         count += bytes.length;
         if (count > expected.size) throw new AppError('TRANSFER_LIMIT');
         crc = updateCrc(crc, bytes);
-        output?.writeBytesSync(bytes);
+        if (bytes.length) output?.writeBytesSync(bytes);
         if (final) {
           if (count !== expected.size || ((crc ^ -1) >>> 0) !== expected.crc) throw new AppError('INVALID_ARCHIVE');
           if (output) { output.close(); handles.delete(output); }
@@ -99,21 +108,66 @@ async function extractImages(archive: File, directory: Directory, remainingBytes
       const bytes = await input.readBytes(16384);
       if (!bytes.length) throw new AppError('INVALID_ARCHIVE');
       processed += bytes.length;
-      unzip.push(bytes, processed === archive.size);
+      try {
+        unzip.push(bytes, processed === archive.size);
+      } catch (error) {
+        throw error instanceof AppError ? error : new AppError('INVALID_ARCHIVE');
+      }
       await yieldFrame();
     }
     if (complete !== entries.length) throw new AppError('INVALID_ARCHIVE');
     if (!result.length) throw new AppError('IMAGE_MISSING');
     return result;
   } finally {
-    input.close();
-    for (const handle of handles) handle.close();
+    try { input.close(); } catch { /* Ignore close errors during cleanup. */ }
+    for (const handle of handles) { try { handle.close(); } catch { /* Ignore close errors during cleanup. */ } }
   }
+}
+
+/**
+ * Copies Android content:// URIs into app-scoped cache storage so FileHandle and ImageManipulator
+ * work reliably in Expo Go (where DocumentPicker's copyToCacheDirectory writes to the unscoped host cache).
+ */
+async function stagePickedFile(
+  asset: DocumentPicker.DocumentPickerAsset,
+  directory: Directory,
+  maxBytes: number,
+  signal?: AbortSignal
+): Promise<File> {
+  const source = new File(asset.uri);
+  if (!asset.uri.startsWith('content://')) return source;
+  if (typeof asset.size === 'number' && Number.isFinite(asset.size)) {
+    if (asset.size > maxBytes) throw new AppError('TRANSFER_LIMIT');
+    freeSpace(asset.size);
+  } else {
+    freeSpace(0);
+  }
+  const extension = asset.name.split('.').at(-1)?.toLowerCase() || 'bin';
+  const target = new File(directory, `${Crypto.randomUUID()}.${extension}`);
+  try {
+    await source.copy(target);
+  } catch (error) {
+    check(signal);
+    try { if (target.exists) target.delete(); } catch { /* Ignore partial copy cleanup errors. */ }
+    if (Paths.availableDiskSpace < 30 * 1024 * 1024) throw new AppError('STORAGE_FULL');
+    if (typeof asset.size === 'number' && asset.size > TRANSFER_LIMITS.imageBytes) throw error;
+    const bytes = await source.bytes();
+    check(signal);
+    if (bytes.length > maxBytes) throw new AppError('TRANSFER_LIMIT');
+    freeSpace(bytes.length);
+    await target.write(bytes);
+  }
+  if (target.size > maxBytes) throw new AppError('TRANSFER_LIMIT');
+  return target;
 }
 
 /** A failed selection never replaces the previously staged image set. */
 export async function pickImportImages(onProgress: TransferProgress, signal?: AbortSignal): Promise<Map<string, Photo> | null> {
-  const selection = await DocumentPicker.getDocumentAsync({ type: ['image/*', 'application/zip', 'application/x-zip-compressed'], multiple: true, copyToCacheDirectory: true });
+  const selection = await DocumentPicker.getDocumentAsync({
+    type: ['image/*', 'application/zip', 'application/x-zip-compressed'],
+    multiple: true,
+    copyToCacheDirectory: Platform.OS === 'ios',
+  });
   check(signal);
   if (selection.canceled) return null;
   if (selection.assets.length > TRANSFER_LIMITS.photos) throw new AppError('TRANSFER_LIMIT');
@@ -124,11 +178,21 @@ export async function pickImportImages(onProgress: TransferProgress, signal?: Ab
     let selectedBytes = 0;
     for (const asset of selection.assets) {
       check(signal);
-      const file = new File(asset.uri);
       let added: { name: string; file: File }[];
-      if (/\.zip$/i.test(asset.name)) added = await extractImages(file, directory, TRANSFER_LIMITS.totalImageBytes - selectedBytes, signal);
-      else if (validFilename(asset.name)) added = [{ name: asset.name, file }];
-      else throw new AppError('IMPORT_FAILED', asset.name);
+      if (/\.zip$/i.test(asset.name)) {
+        const staged = await stagePickedFile(asset, directory, TRANSFER_LIMITS.totalImageBytes + 2 * 1024 * 1024, signal);
+        try {
+          added = await extractImages(staged, directory, TRANSFER_LIMITS.totalImageBytes - selectedBytes, signal);
+        } finally {
+          if (staged.uri !== asset.uri) {
+            try { if (staged.exists) staged.delete(); } catch { /* Temp directory cleanup removes leftovers. */ }
+          }
+        }
+      } else if (validFilename(asset.name)) {
+        const remaining = Math.max(0, TRANSFER_LIMITS.totalImageBytes - selectedBytes);
+        const staged = await stagePickedFile(asset, directory, Math.min(TRANSFER_LIMITS.imageBytes, remaining), signal);
+        added = [{ name: asset.name, file: staged }];
+      } else throw new AppError('IMPORT_FAILED', asset.name);
       for (const input of added) {
         selectedBytes += input.file.size;
         if (input.file.size > TRANSFER_LIMITS.imageBytes || selectedBytes > TRANSFER_LIMITS.totalImageBytes) throw new AppError('TRANSFER_LIMIT');

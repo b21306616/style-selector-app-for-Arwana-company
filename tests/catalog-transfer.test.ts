@@ -39,7 +39,7 @@ test('exports only Russian and Turkmen with six readable columns and no hidden s
   expect(book.Sheets.Russian.A2.v).toBe(book.Sheets.Turkmen.A2.v);
 });
 
-test('the empty template contains headers only with column widths and filters and cannot erase a draft through import', () => {
+test('the empty template contains headers only with column widths and filters and can clear a draft through import', () => {
   const book = XLSX.read(encodeWorkbook(), { type: 'array', cellStyles: true });
   expect(book.SheetNames).toEqual(['Russian', 'Turkmen']);
   for (const name of book.SheetNames) {
@@ -49,15 +49,17 @@ test('the empty template contains headers only with column widths and filters an
   }
   const decoded = decodeWorkbook(encodeWorkbook());
   expect(decoded.photos).toEqual([]);
-  expect(decoded.issues).toContainEqual(expect.objectContaining({ sheet: 'Russian', row: 2, column: 'Image filename' }));
-  expect(previewImport(seedCatalog, decoded, new Map(), 'replace').issues.length).toBeGreaterThan(0);
+  expect(decoded.issues).toEqual([]);
+  const preview = previewImport(seedCatalog, decoded, new Map());
+  expect(preview.issues).toEqual([]);
+  expect(preview.catalog).toMatchObject({ rooms: [], terms: [], photos: [], galleries: { whole_house: [] }, sample: false });
 });
 
 test('a workbook and its images restore all bilingual descriptions into room galleries', () => {
   const input = cloneCatalog(seedCatalog);
   input.terms[0].labels = { ru: 'Тёплый современный', tk: 'Ýyly döwrebap' };
   const workbook = decodeWorkbook(encodeWorkbook(input));
-  const preview = previewImport(empty(), workbook, imageMap(input), 'replace');
+  const preview = previewImport(empty(), workbook, imageMap(input));
   expect(preview.issues).toEqual([]);
   expect(preview.warnings).toBe(0);
   expect(decodeWorkbook(encodeWorkbook(preview.catalog)).photos.map(row => row.value)).toEqual(workbook.photos.map(row => row.value));
@@ -66,14 +68,15 @@ test('a workbook and its images restore all bilingual descriptions into room gal
   expect(preview.catalog.photos.every(photo => photo.image.kind === 'local' && !photo.sample)).toBe(true);
 });
 
-test('unchanged reimport retains photo identities, images, and curated galleries', () => {
+test('reimport creates a clean draft while reusing matching images', () => {
   const current = normalizePhotoFilenames(seedCatalog);
-  const preview = previewImport(current, decodeWorkbook(encodeWorkbook(current)), new Map(), 'merge');
+  const preview = previewImport(current, decodeWorkbook(encodeWorkbook(current)), new Map());
   expect(preview.issues).toEqual([]);
-  expect(preview.updated).toBe(0);
-  expect(preview.added).toBe(0);
-  expect(preview.removed).toBe(0);
-  expect(preview.catalog).toEqual(current);
+  expect(preview.added).toBe(current.rooms.length + current.terms.length + current.photos.length);
+  expect(preview.removed).toBeGreaterThanOrEqual(current.photos.length);
+  expect(preview.catalog.photos.map(photo => photo.image)).toEqual(current.photos.map(photo => photo.image));
+  expect(preview.catalog.photos.every(photo => !photo.sample)).toBe(true);
+  expect(preview.catalog.galleries.whole_house).toEqual([]);
 });
 
 test('language rows pair by normalized filename rather than row position', () => {
@@ -84,7 +87,7 @@ test('language rows pair by normalized filename rather than row position', () =>
   expect(workbook.issues).toEqual([]);
   expect(workbook.photos[0].rows).toEqual({ ru: 2, tk: seedCatalog.photos.length + 1 });
   expect(workbook.photos[0].value.style).toEqual(seedCatalog.terms[0].labels);
-  expect(previewImport(seedCatalog, workbook, new Map(), 'merge').issues).toEqual([]);
+  expect(previewImport(seedCatalog, workbook, new Map()).issues).toEqual([]);
 });
 
 test('Unicode-normalized filenames pair between sheets and selected image files', () => {
@@ -94,7 +97,7 @@ test('Unicode-normalized filenames pair between sheets and selected image files'
   }, onePhoto()));
   expect(workbook.issues).toEqual([]);
   const images = new Map([[filenameKey('su\u0308rat.jpg'), { ...seedCatalog.photos[0], id: 'new-photo' }]]);
-  expect(previewImport(empty(), workbook, images, 'merge').issues).toEqual([]);
+  expect(previewImport(empty(), workbook, images).issues).toEqual([]);
 });
 
 test.each(['Russian', 'Turkmen'])('%s requires all six values in every nonblank photo row', sheet => {
@@ -233,96 +236,94 @@ test('rejects legacy workbooks, extra sheets, swapped order, missing sheets, and
   }, onePhoto()))).toThrow('INVALID_WORKBOOK');
 });
 
-test('merge preserves omitted records and existing gallery selections regardless of spreadsheet order', () => {
+test('import removes records omitted from the workbook and rebuilds galleries in row order', () => {
   const current = normalizePhotoFilenames(seedCatalog);
   const workbook = decodeWorkbook(encodeWorkbook(current));
   workbook.photos = workbook.photos.slice(0, 2).reverse();
-  const preview = previewImport(current, workbook, new Map(), 'merge');
+  const preview = previewImport(current, workbook, new Map());
   expect(preview.issues).toEqual([]);
-  expect(preview.catalog).toEqual(current);
+  expect(preview.catalog.photos).toHaveLength(2);
+  expect(preview.catalog.galleries.whole_house).toEqual([]);
+  expect(preview.catalog.galleries[preview.catalog.photos[0].room]).toEqual(preview.catalog.photos.map(photo => photo.id));
+  expect(preview.removed).toBeGreaterThan(0);
 });
 
-test('new merged photos join only their room gallery, never Whole House', () => {
+test('new imported photos enter their room gallery and leave Whole House empty', () => {
   const workbook = decodeWorkbook(encodeWorkbook(onePhoto()));
   workbook.photos[0].value.filename = 'new.jpg';
   const supplied = { ...seedCatalog.photos[0], id: 'prepared-new', sample: false };
-  const preview = previewImport(seedCatalog, workbook, new Map([['new.jpg', supplied]]), 'merge');
+  const preview = previewImport(seedCatalog, workbook, new Map([['new.jpg', supplied]]));
   expect(preview.issues).toEqual([]);
-  expect(preview.catalog.photos).toHaveLength(seedCatalog.photos.length + 1);
-  expect(preview.catalog.galleries[supplied.room]).toContain('prepared-new');
-  expect(preview.catalog.galleries.whole_house).toEqual(seedCatalog.galleries.whole_house);
+  expect(preview.catalog.photos).toHaveLength(1);
+  expect(preview.catalog.galleries[preview.catalog.photos[0].room]).toEqual([preview.catalog.photos[0].id]);
+  expect(preview.catalog.galleries.whole_house).toEqual([]);
 });
 
 test('replacement keeps represented content and builds room galleries in Russian row order', () => {
   const original = normalizePhotoFilenames(seedCatalog);
   const workbook = decodeWorkbook(encodeWorkbook(original));
   workbook.photos = workbook.photos.slice(0, 3).reverse();
-  const preview = previewImport(original, workbook, new Map(), 'replace');
+  const preview = previewImport(original, workbook, new Map());
   expect(preview.issues).toEqual([]);
-  expect(preview.catalog.photos.map(photo => photo.id)).toEqual(original.photos.slice(0, 3).reverse().map(photo => photo.id));
-  expect(preview.catalog.galleries.bathroom).toEqual(preview.catalog.photos.map(photo => photo.id));
+  expect(preview.catalog.photos.map(photo => photo.id)).not.toEqual(original.photos.slice(0, 3).reverse().map(photo => photo.id));
+  expect(preview.catalog.galleries[preview.catalog.photos[0].room]).toEqual(preview.catalog.photos.map(photo => photo.id));
   expect(preview.catalog.galleries.whole_house).toEqual([]);
-  expect(preview.catalog.rooms.map(room => room.id)).toEqual(['bathroom']);
+  expect(preview.catalog.rooms).toHaveLength(1);
   expect(preview.removed).toBeGreaterThanOrEqual(seedCatalog.photos.length - 3);
   expect(original).toEqual(normalizePhotoFilenames(seedCatalog));
 });
 
-test('moving a selected existing photo moves its room membership while preserving Whole House', () => {
+test('imported room membership comes entirely from the workbook', () => {
   const workbook = decodeWorkbook(encodeWorkbook(onePhoto()));
   workbook.photos[0].value.room = seedCatalog.rooms.find(room => room.id === 'kitchen')!.labels;
-  const preview = previewImport(seedCatalog, workbook, new Map(), 'merge');
-  const id = seedCatalog.photos[0].id;
+  const preview = previewImport(seedCatalog, workbook, new Map());
+  const id = preview.catalog.photos[0].id;
   expect(preview.issues).toEqual([]);
-  expect(preview.catalog.galleries.bathroom).not.toContain(id);
-  expect(preview.catalog.galleries.kitchen).toContain(id);
-  expect(preview.catalog.galleries.whole_house).toEqual(seedCatalog.galleries.whole_house);
+  expect(preview.catalog.galleries.bathroom).toBeUndefined();
+  expect(preview.catalog.galleries[preview.catalog.photos[0].room]).toContain(id);
+  expect(preview.catalog.galleries.whole_house).toEqual([]);
 });
 
 test('missing images identify their spreadsheet row, while supplied files replace existing images', () => {
   const workbook = decodeWorkbook(encodeWorkbook(onePhoto()));
-  expect(previewImport(empty(), workbook, new Map(), 'replace').issues).toContainEqual(expect.objectContaining({ sheet: 'Russian', row: 2, column: 'Image filename' }));
-  const preview = previewImport(seedCatalog, workbook, imageMap(onePhoto()), 'merge');
+  expect(previewImport(empty(), workbook, new Map()).issues).toContainEqual(expect.objectContaining({ sheet: 'Russian', row: 2, column: 'Image filename' }));
+  const preview = previewImport(seedCatalog, workbook, imageMap(onePhoto()));
   expect(preview.issues).toEqual([]);
-  expect(preview.catalog.photos[0].id).toBe(seedCatalog.photos[0].id);
+  expect(preview.catalog.photos[0].id).not.toBe(seedCatalog.photos[0].id);
   expect(preview.catalog.photos[0].image).toEqual({ kind: 'local', file: 'new-0.jpg', thumbnail: 'new-0-thumb.jpg' });
-  expect(preview.updated).toBe(1);
 });
 
-test('a consistent translation correction reuses shared vocabulary identities', () => {
+test('a consistent translation correction is represented in the fresh workbook vocabulary', () => {
   const workbook = decodeWorkbook(encodeWorkbook(seedCatalog));
   for (const photo of workbook.photos) if (photo.value.style.ru === 'Скандинавский') photo.value.style.tk = 'Täze Skandinaw';
-  const preview = previewImport(seedCatalog, workbook, new Map(), 'merge');
+  const preview = previewImport(seedCatalog, workbook, new Map());
   expect(preview.issues).toEqual([]);
-  expect(preview.catalog.terms.find(term => term.id === 'scandinavian')!.labels.tk).toBe('Täze Skandinaw');
-  expect(preview.catalog.terms).toHaveLength(seedCatalog.terms.length);
-  expect(preview.updated).toBe(1);
+  expect(preview.catalog.terms.find(term => term.labels.ru === 'Скандинавский')!.labels.tk).toBe('Täze Skandinaw');
+  expect(preview.catalog.terms.every(term => term.labels.ru !== 'Минимализм' || workbook.photos.some(row => row.value.style.ru === 'Минимализм'))).toBe(true);
 });
 
-test('inconsistent translations and labels referring to different records block importing', () => {
+test('inconsistent translations repeated in a workbook block importing', () => {
   const inconsistent = decodeWorkbook(encodeWorkbook(seedCatalog));
   inconsistent.photos[0].value.style.tk = 'Başga terjime';
-  expect(previewImport(seedCatalog, inconsistent, new Map(), 'merge').issues).toContainEqual(expect.objectContaining({ column: 'Style' }));
-  const conflicting = decodeWorkbook(encodeWorkbook(onePhoto()));
-  conflicting.photos[0].value.style.tk = seedCatalog.terms.find(term => term.id === 'minimalist')!.labels.tk;
-  expect(previewImport(seedCatalog, conflicting, new Map(), 'merge').issues).toContainEqual(expect.objectContaining({ sheet: 'Russian', row: 2, column: 'Style' }));
+  expect(previewImport(seedCatalog, inconsistent, new Map()).issues).toContainEqual(expect.objectContaining({ column: 'Style' }));
 });
 
 test('new bilingual room and term labels get internal IDs without workbook IDs', () => {
   const workbook = decodeWorkbook(encodeWorkbook(onePhoto()));
   workbook.photos[0].value.room = { ru: 'Кабинет', tk: 'Iş otagy' };
   workbook.photos[0].value.style = { ru: 'Уютный', tk: 'Rahat' };
-  const preview = previewImport(empty(), workbook, imageMap(onePhoto()), 'replace');
+  const preview = previewImport(empty(), workbook, imageMap(onePhoto()));
   expect(preview.issues).toEqual([]);
   expect(preview.catalog.rooms[0].labels).toEqual(workbook.photos[0].value.room);
   expect(preview.catalog.terms.find(term => term.kind === 'style')!.labels).toEqual(workbook.photos[0].value.style);
-  expect(previewImport(empty(), workbook, imageMap(onePhoto()), 'replace').catalog).toEqual(preview.catalog);
+  expect(previewImport(empty(), workbook, imageMap(onePhoto())).catalog).toEqual(preview.catalog);
 });
 
 test('vocabulary resolution stops at the 5,000-term limit while existing terms remain reusable', () => {
   const source = onePhoto();
   const workbook = decodeWorkbook(encodeWorkbook(source));
   workbook.photos[0].value.palette = Array.from({ length: 5_001 }, (_, index) => ({ ru: `Палитра ${index}`, tk: `Palitra ${index}` }));
-  const limited = previewImport(empty(), workbook, imageMap(source), 'replace');
+  const limited = previewImport(empty(), workbook, imageMap(source));
   expect(limited.issues).toContainEqual(expect.objectContaining({ sheet: 'Russian', row: 2, column: 'Palette' }));
   expect(limited.catalog.terms).toHaveLength(5_000);
 
@@ -330,9 +331,9 @@ test('vocabulary resolution stops at the 5,000-term limit while existing terms r
   full.terms.push(...Array.from({ length: 5_000 - full.terms.length }, (_, index) => ({
     id: `unused-${index}`, kind: 'detail' as const, labels: { ru: `Неиспользуемый ${index}`, tk: `Ulanylmaýan ${index}` },
   })));
-  const unchanged = previewImport(full, decodeWorkbook(encodeWorkbook(full)), new Map(), 'merge');
+  const unchanged = previewImport(full, decodeWorkbook(encodeWorkbook(full)), new Map());
   expect(unchanged.issues).toEqual([]);
-  expect(unchanged.catalog.terms).toHaveLength(5_000);
+  expect(unchanged.catalog.terms.length).toBeLessThan(5_000);
 });
 
 test('rejects truncated archives, non-ZIP workbooks, unsafe paths, excessive expansion and embedded images', () => {
@@ -359,7 +360,7 @@ test('500 photos round trip with all descriptions and room order while 501 are r
   const catalog = cloneCatalog(seedCatalog);
   catalog.photos = Array.from({ length: 500 }, (_, index) => ({ ...seedCatalog.photos[index % seedCatalog.photos.length], id: `benchmark-${index}` }));
   const workbook = decodeWorkbook(encodeWorkbook(catalog));
-  const preview = previewImport(empty(), workbook, imageMap(catalog), 'replace');
+  const preview = previewImport(empty(), workbook, imageMap(catalog));
   expect(preview.issues).toEqual([]);
   expect(preview.catalog.photos).toHaveLength(500);
   expect(decodeWorkbook(encodeWorkbook(preview.catalog)).photos.map(row => row.value)).toEqual(workbook.photos.map(row => row.value));

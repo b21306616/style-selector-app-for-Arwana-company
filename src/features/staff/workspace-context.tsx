@@ -2,7 +2,7 @@ import * as Crypto from 'expo-crypto';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type PropsWithChildren } from 'react';
 import { useApp } from '../../state/AppProvider';
 import { useStaffAuth } from './auth-context';
-import { addDraftPhoto, addDraftTerm, draftFingerprint, previewImport, TRANSFER_LIMITS, type ImportMode, type ImportPreview } from '../../domain/catalog-transfer';
+import { addDraftPhoto, addDraftTerm, draftFingerprint, previewImport, TRANSFER_LIMITS, type ImportPreview } from '../../domain/catalog-transfer';
 import { AppError } from '../../domain/errors';
 import { addDraftRoom, removeDraftOptions } from '../../domain/catalog';
 import { hasRoom } from '../../domain/rooms';
@@ -40,7 +40,6 @@ function useWorkspaceController() {
   const [inlineRoom, setInlineRoom] = useState(false);
   const [book, setBook] = useState<Awaited<ReturnType<typeof pickWorkbook>>>(null);
   const [images, updateImages] = useState(new Map<string, Photo>());
-  const [mode, setMode] = useState<ImportMode>('merge');
   const [exports, updateExports] = useState<ExportFiles | null>(null);
   const [template, updateTemplate] = useState<ExportFiles | null>(null);
   const [operation, setOperation] = useState<string | null>(null);
@@ -70,7 +69,7 @@ function useWorkspaceController() {
     return () => { alive.current = false; controller.current?.abort(); if (!pending.current) release(); };
   }, []);
 
-  const review = useMemo(() => app.draft && book ? previewImport(app.draft, book.workbook, images, mode) : null, [app.draft, book, images, mode]);
+  const review = useMemo(() => app.draft && book ? previewImport(app.draft, book.workbook, images) : null, [app.draft, book, images]);
   function setConfirmReplace(visible: boolean) { replacement.current = visible ? review : null; updateConfirmReplace(visible); }
   function unlocked() { if (!auth.isUnlocked()) throw new AppError('STAFF_LOCKED'); }
   function active(signal: AbortSignal) { if (signal.aborted || !alive.current) throw new AppError('TRANSFER_CANCELED'); }
@@ -142,7 +141,7 @@ function useWorkspaceController() {
     active(signal);
     if (!next) return;
     discardPreparedPhotos(owned.current.images.values()); setImages(new Map());
-    setBook(next); setMode('merge'); setConfirmReplace(false);
+    setBook(next); setConfirmReplace(false);
   });
   const chooseImages = () => run('images', async signal => {
     const next = await pickImportImages(report, signal);
@@ -160,7 +159,7 @@ function useWorkspaceController() {
     setImages(merged);
   });
   const applyImport = () => run('save', async () => {
-    const candidate = confirmReplace ? replacement.current : review;
+    const candidate = replacement.current ?? review;
     if (!candidate || candidate.issues.length) return;
     unlocked();
     try {
@@ -169,7 +168,7 @@ function useWorkspaceController() {
         unlocked();
         if (draftFingerprint(current) !== candidate.base) throw new AppError('STALE_DRAFT');
         return candidate.catalog;
-      });
+      }, { replace: true });
     } catch (failure) {
       if (!(failure instanceof AppError && ['STALE_DRAFT', 'STAFF_LOCKED'].includes(failure.code))) {
         discardPreparedPhotos(owned.current.images.values()); setImages(new Map());
@@ -204,7 +203,7 @@ function useWorkspaceController() {
     discardPreparedPhotos(owned.current.images.values()); setImages(new Map()); setBook(null); setError(null); setConfirmReplace(false);
   };
   const dirty = !!photo || JSON.stringify(fields) !== JSON.stringify(emptyFields()) || !!term.labels.ru || !!term.labels.tk || !!room.labels.ru || !!room.labels.tk || spaces.length > 0;
-  return { fields, setFields, spaces, setSpaces, photo, term, setTerm, inlineTerm, setInlineTerm, room, setRoom, inlineRoom, setInlineRoom, book, images, mode, setMode, review, exports, template, operation, feedbackArea, progress, error, success, dirty,
+  return { fields, setFields, spaces, setSpaces, photo, term, setTerm, inlineTerm, setInlineTerm, room, setRoom, inlineRoom, setInlineRoom, book, images, review, exports, template, operation, feedbackArea, progress, error, success, dirty,
     confirmReplace, setConfirmReplace, choosePhoto, removePhoto, savePhoto, saveTerm, saveRoom, deleteOptions, chooseWorkbook, chooseImages, applyImport, exportDraft, makeTemplate, share, discardForm, discardImport,
     cancel: () => controller.current?.abort(), busy: !!operation || app.busy,
     startTerm: (kind: TermKind) => { setTerm(emptyTerm(kind)); setInlineTerm(true); if (feedbackArea === 'entry') { setError(null); setSuccess(null); } },

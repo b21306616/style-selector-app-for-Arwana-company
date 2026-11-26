@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { Button, Chip, colors, spaceLabel, tx, typography, useLayout } from '../../components/ui';
+import { Button, colors, spaceLabel, tx, typography, useLayout } from '../../components/ui';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { catalogSpaces } from '../../domain/rooms';
 import { useApp } from '../../state/AppProvider';
@@ -43,18 +43,12 @@ export function DashboardWorkbench() {
     {w.book && w.review && <View style={s.card}>
       <Text accessibilityRole="header" style={typography.subheading}>{t('Importy barlamak', 'Проверка импорта')}</Text>
       <Text style={typography.small}>{w.book.name}</Text>
-      <Text style={typography.small}>{t('Täze suratlar üçin atlary Excel-e gabat gelýän faýllary saýlaň. Bar bolan faýl ady şol suraty täzeleýär; täze faýl saýlanmasa, öňki surat saklanýar. Üýtgeşmeler ilki garalama ýazylýar.', 'Для новых фото выберите файлы с именами из Excel. Совпадающее имя обновляет существующее фото; если новый файл не выбран, изображение сохраняется. Изменения сначала сохраняются в черновик.')}</Text>
+      <Text style={typography.small}>{t('Täze suratlar üçin atlary Excel-e gabat gelýän faýllary saýlaň. Gabat gelýän faýl ady saklanan şekili ulanýar, ýöne ähli garalama maglumatlary Excel-den täzeden döredilýär. Üýtgeşmeler ilki garalama ýazylýar.', 'Для новых фото выберите файлы с именами из Excel. Совпадающее имя использует сохранённое изображение, но все данные черновика заново создаются из Excel. Изменения сначала сохраняются в черновик.')}</Text>
       <Button title={t('ZIP ýa-da suratlary saýlamak', 'Выбрать ZIP или фотографии')} variant="secondary" onPress={() => void w.chooseImages()} disabled={w.busy} />
       <Text style={typography.small}>{t('Taýýar suratlar', 'Подготовлено фотографий')}: {w.images.size}</Text>
-      <View style={s.row}>
-        <Chip label={t('Birleşdirmek', 'Объединить')} selected={w.mode === 'merge'} onPress={() => w.setMode('merge')} disabled={w.busy} />
-        <Chip label={t('Garalamany çalyşmak', 'Заменить черновик')} selected={w.mode === 'replace'} onPress={() => w.setMode('replace')} disabled={w.busy} />
-      </View>
-      <Text style={typography.small}>{w.mode === 'merge'
-        ? t('Kitapda ýok ýazgylar we öňki toplumlaryň tertibi saklanýar. Täze suratlar diňe öz otagynyň toplumyna, Russian sahypasynyň tertibinde goşulýar.', 'Записи вне книги и порядок существующих подборок сохраняются. Новые фото добавляются только в подборку своей комнаты, в порядке листа Russian.')
-        : t('Diňe Excel-däki ýazgylar galar. Otag toplumlary Russian sahypasynyň tertibinde dörediler; «Bütin jaý» boş bolar. Çap edilen katalog üýtgemez.', 'Останутся только записи из Excel. Комнатные подборки будут созданы в порядке листа Russian; «Весь дом» станет пустым. Опубликованный каталог сохранится.')}</Text>
+      <Text style={typography.small}>{t('Excel-de ýok ähli ýazgylar aýrylar. Otag toplumlary Russian sahypasynyň tertibinde dörediler, «Bütin jaý» boş bolar. Çap edilen katalog üýtgemez.', 'Все записи вне Excel будут удалены. Комнатные подборки будут созданы в порядке листа Russian, а «Весь дом» останется пустым. Опубликованный каталог сохранится.')}</Text>
       <View style={styles.stats}>
-        {[ [t('Goşular', 'Добавится'), w.review.added], [t('Täzelener', 'Обновится'), w.review.updated], [t('Aýrylar', 'Удалится'), w.review.removed] ].map(([label, count]) => <View style={styles.stat} key={label}><Text style={styles.statNumber}>{count}</Text><Text style={typography.small}>{label}</Text></View>)}
+        {[ [t('Goşular', 'Добавится'), w.review.added], [t('Aýrylar', 'Удалится'), w.review.removed] ].map(([label, count]) => <View style={styles.stat} key={label}><Text style={styles.statNumber}>{count}</Text><Text style={typography.small}>{label}</Text></View>)}
       </View>
       <Text style={typography.small}>{t('Netije', 'После импорта')}: {w.review.catalog.photos.length} {t('surat', 'фото')} · {w.review.catalog.terms.length} {t('termin', 'терминов')}</Text>
       {catalogSpaces(w.review.catalog).map(space => <View key={space} style={styles.summaryRow}><Text style={[typography.small, { flex: 1 }]}>{spaceLabel(space, language, w.review!.catalog.rooms)}</Text><Text style={s.label}>{draft.galleries[space]?.length ?? 0} → {w.review!.catalog.galleries[space].length}</Text></View>)}
@@ -67,7 +61,7 @@ export function DashboardWorkbench() {
           <Button title={t('Indiki ýalňyşlyklar', 'Следующие ошибки')} variant="ghost" disabled={(page + 1) * 25 >= w.review.issues.length} onPress={() => setIssuePage(page + 1)} />
         </View>}
       </View>}
-      <Button title={t('Importy garalama ýazdyrmak', 'Сохранить импорт в черновик')} disabled={w.busy || !!w.review.issues.length} onPress={() => w.mode === 'replace' ? w.setConfirmReplace(true) : void w.applyImport()} />
+      <Button title={t('Importy garalama ýazdyrmak', 'Сохранить импорт в черновик')} disabled={w.busy || !!w.review.issues.length} onPress={() => w.setConfirmReplace(true)} />
       <Button title={t('Importy ýatyrmak', 'Отменить импорт')} variant="ghost" disabled={w.busy} onPress={w.discardImport} />
     </View>}
 

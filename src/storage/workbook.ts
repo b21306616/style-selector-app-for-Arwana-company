@@ -184,7 +184,6 @@ export function decodeWorkbook(bytes: Uint8Array): CatalogWorkbook {
     } });
   }
   for (const [key, tk] of tkRows) if (!ruRows.has(key)) problem(sheets.tk, tk.row, 'Image filename', 'Добавьте строку с этим именем файла на лист Russian.', 'Şu faýl atly setiri Russian sahypasyna goşuň.');
-  if (!russian.length && !turkmen.length && !issues.length) problem(sheets.ru, 2, 'Image filename', 'В книге нет фотографий. Заполните строки на обоих листах.', 'Kitapda surat ýok. Iki sahypada hem setirleri dolduryň.');
   return { photos, issues };
 }
 

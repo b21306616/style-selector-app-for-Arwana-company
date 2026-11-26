@@ -1,5 +1,6 @@
 import { beforeEach, expect, jest, test } from '@jest/globals';
-import { unzipSync, zipSync } from 'fflate';
+import { Zip, ZipDeflate, unzipSync, zipSync } from 'fflate';
+import { Platform } from 'react-native';
 import { createExport, pickImportImages, pickWorkbook, shareExport } from '../src/storage/catalog-files';
 import { decodeWorkbook, encodeWorkbook } from '../src/storage/workbook';
 import { seedCatalog } from '../src/data/catalog';
@@ -7,6 +8,7 @@ import { cloneCatalog } from '../src/domain/catalog';
 import { normalizePhotoFilenames } from '../src/domain/photo-filenames';
 import type { Photo } from '../src/domain/types';
 import { AppError } from '../src/domain/errors';
+import { File } from 'expo-file-system';
 
 type Stored = { data: Uint8Array; size: number };
 const mockFiles = new Map<string, Stored>();
@@ -16,7 +18,9 @@ const mockWholeReads: string[] = [];
 const mockReadSizes: number[] = [];
 let mockOpenHandles = 0;
 let mockId = 0;
-const mockPick = jest.fn<() => Promise<{ canceled: boolean; assets: { name: string; uri: string }[] }>>();
+let mockCopyError: Error | null = null;
+const mockPick = jest.fn<(options?: unknown) => Promise<{ canceled: boolean; assets: { name: string; uri: string; size?: number }[] }>>();
+const mockWorkbookPick = jest.fn<() => Promise<{ canceled: boolean; result: File | null }>>();
 const mockShare = jest.fn<(uri: string, options?: unknown) => Promise<void>>().mockResolvedValue(undefined);
 const mockShareAvailable = jest.fn<() => Promise<boolean>>().mockResolvedValue(true);
 const mockPrepare = jest.fn<(assets: { uri: string }[]) => Promise<Photo[]>>();
@@ -25,7 +29,7 @@ function mockPut(uri: string, bytes: Uint8Array) { mockFiles.set(uri, { data: by
 function mockData(uri: string) { const value = mockFiles.get(uri)!; return value.data.subarray(0, value.size); }
 
 jest.mock('expo-crypto', () => ({ randomUUID: () => `id-${++mockId}` }));
-jest.mock('expo-document-picker', () => ({ getDocumentAsync: () => mockPick() }));
+jest.mock('expo-document-picker', () => ({ getDocumentAsync: (options?: unknown) => mockPick(options) }));
 jest.mock('expo-sharing', () => ({ shareAsync: (uri: string, options?: unknown) => mockShare(uri, options), isAvailableAsync: () => mockShareAvailable() }));
 jest.mock('expo-asset', () => ({ Asset: { fromModule: () => ({ downloadAsync: async () => ({ localUri: '/bundled/sample.jpg' }) }) } }));
 jest.mock('../src/storage/images', () => ({
@@ -38,12 +42,20 @@ jest.mock('expo-file-system', () => {
   class File {
     uri: string;
     constructor(...parts: (string | { uri: string })[]) { this.uri = join(parts); }
+    get name() { return this.uri.split('/').at(-1) ?? ''; }
     get exists() { return mockFiles.has(this.uri); }
     get size() { return mockFiles.get(this.uri)?.size ?? 0; }
     create() { mockPut(this.uri, new Uint8Array()); }
+    delete() { mockFiles.delete(this.uri); }
+    async copy(target: File) {
+      if (mockCopyError) throw mockCopyError;
+      mockPut(target.uri, mockData(this.uri));
+    }
     async write(bytes: Uint8Array) { mockPut(this.uri, bytes); }
     async bytes() { mockWholeReads.push(this.uri); return mockData(this.uri); }
+    static pickFileAsync() { return mockWorkbookPick(); }
     open() {
+      if (this.uri.startsWith('content://')) throw new Error('Content URI does not support random-access FileHandle');
       let offset = 0;
       let closed = false;
       mockOpenHandles++;
@@ -73,13 +85,34 @@ jest.mock('expo-file-system', () => {
 });
 
 beforeEach(() => {
-  jest.clearAllMocks(); mockFiles.clear(); mockDirs.clear(); mockId = 0; mockOpenHandles = 0;
+  jest.clearAllMocks(); mockFiles.clear(); mockDirs.clear(); mockId = 0; mockOpenHandles = 0; mockCopyError = null;
+  mockWorkbookPick.mockReset();
   mockReadSizes.length = 0; mockWholeReads.length = 0; mockPaths.availableDiskSpace = 3 * 1024 ** 3;
   mockPrepare.mockImplementation(async assets => assets.map(() => ({ ...seedCatalog.photos[0], id: `prepared-${++mockId}`, image: { kind: 'local', file: 'prepared.jpg', thumbnail: 'prepared-thumb.jpg' } })));
   mockShareAvailable.mockResolvedValue(true);
 });
-const selection = (name: string, uri: string) => ({ canceled: false, assets: [{ name, uri }] });
+const selection = (name: string, uri: string, size?: number) => ({ canceled: false, assets: [{ name, uri, ...(size !== undefined ? { size } : {}) }] });
 const cachedFiles = () => [...mockFiles.keys()].filter(uri => uri.startsWith('/cache/arwana-transfers/'));
+
+function streamedZip(entries: Record<string, Uint8Array>): Uint8Array {
+  const chunks: Uint8Array[] = [];
+  const zip = new Zip((error, data, final) => {
+    if (error) throw error;
+    chunks.push(data);
+    if (final) return;
+  });
+  for (const [name, payload] of Object.entries(entries)) {
+    const entry = new ZipDeflate(name);
+    zip.add(entry);
+    entry.push(payload, true);
+  }
+  zip.end();
+  const total = chunks.reduce((sum, chunk) => sum + chunk.length, 0);
+  const out = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) { out.set(chunk, offset); offset += chunk.length; }
+  return out;
+}
 
 test('native export streams both bundled and local images and produces matching workbook filenames', async () => {
   const catalog = cloneCatalog(seedCatalog);
@@ -187,12 +220,17 @@ test('low storage fails before output creation and sharing availability is check
   expect(mockShare).not.toHaveBeenCalled();
 });
 
-test('canceling the native document picker is a no-op and a chosen workbook is parsed', async () => {
-  mockPick.mockResolvedValueOnce({ canceled: true, assets: [] });
+test('canceling the native workbook picker is a no-op and a chosen workbook is parsed', async () => {
+  mockWorkbookPick.mockResolvedValueOnce({ canceled: true, result: null });
   expect(await pickWorkbook()).toBeNull();
   mockPut('/input/catalog.xlsx', encodeWorkbook(seedCatalog));
-  mockPick.mockResolvedValue(selection('catalog.xlsx', '/input/catalog.xlsx'));
+  mockWorkbookPick.mockResolvedValue({ canceled: false, result: new File('/input/catalog.xlsx') });
   expect((await pickWorkbook())!.workbook.photos).toHaveLength(seedCatalog.photos.length);
+});
+
+test('an unreadable selected workbook reports a specific file-read error', async () => {
+  mockWorkbookPick.mockResolvedValue({ canceled: false, result: new File('/input/unavailable.xlsx') });
+  await expect(pickWorkbook()).rejects.toMatchObject({ code: 'WORKBOOK_READ_FAILED', detail: 'unavailable.xlsx' });
 });
 
 test('500-photo export uses bounded reads and reports progress through completion', async () => {
@@ -207,3 +245,59 @@ test('500-photo export uses bounded reads and reports progress through completio
   expect(mockWholeReads).toEqual([]);
   expect(mockOpenHandles).toBe(0);
 }, 15000);
+
+test('Android ZIP import skips unscoped DocumentPicker caching and extracts streamed data-descriptor archives from content:// URIs', async () => {
+  const previousOS = Platform.OS;
+  Platform.OS = 'android';
+  try {
+    const archive = streamedZip({
+      'mahri.png': new Uint8Array(25000).fill(11),
+      'nazar.png': new Uint8Array(30000).fill(22),
+      '1.png': new Uint8Array(40000).fill(33),
+    });
+    const contentUri = 'content://com.android.externalstorage.documents/document/primary%3ADownload%2Finput.zip';
+    mockPut(contentUri, archive);
+    mockPick.mockResolvedValue(selection('input.zip', contentUri, archive.length));
+    const images = await pickImportImages(jest.fn());
+    expect(mockPick).toHaveBeenCalledWith(expect.objectContaining({ copyToCacheDirectory: false, multiple: true }));
+    expect([...images!.keys()]).toEqual(['mahri.png', 'nazar.png', '1.png']);
+    expect(cachedFiles()).toEqual([]);
+    expect(mockWholeReads).toEqual([]);
+    expect(mockOpenHandles).toBe(0);
+  } finally { Platform.OS = previousOS; }
+});
+
+test('Android photo import stages content:// images into scoped cache and falls back to bytes() if copy fails', async () => {
+  const previousOS = Platform.OS;
+  Platform.OS = 'android';
+  try {
+    const contentUri = 'content://com.android.providers.downloads.documents/document/msf%3A1001';
+    mockPut(contentUri, new Uint8Array([10, 20, 30]));
+    mockPick.mockResolvedValue(selection('1.png', contentUri, 3));
+    mockCopyError = new Error('Source has no file name');
+    mockPrepare.mockImplementation(async assets => {
+      expect(assets[0].uri.startsWith('/cache/arwana-transfers/')).toBe(true);
+      expect(mockData(assets[0].uri)).toEqual(new Uint8Array([10, 20, 30]));
+      return [{ ...seedCatalog.photos[0] }];
+    });
+    const images = await pickImportImages(jest.fn());
+    expect(images!.has('1.png')).toBe(true);
+    expect(cachedFiles()).toEqual([]);
+  } finally { Platform.OS = previousOS; }
+});
+
+test('iOS keeps copyToCacheDirectory enabled and corrupt ZIP streams report INVALID_ARCHIVE', async () => {
+  const previousOS = Platform.OS;
+  Platform.OS = 'ios';
+  try {
+    const base = streamedZip({ '1.png': new Uint8Array(10000).fill(7) });
+    // Corrupt deflate payload inside the compressed stream before the data descriptor.
+    base[45] ^= 0xff;
+    mockPut('/input/corrupt.zip', base);
+    mockPick.mockResolvedValue(selection('corrupt.zip', '/input/corrupt.zip'));
+    await expect(pickImportImages(jest.fn())).rejects.toMatchObject({ code: 'INVALID_ARCHIVE' });
+    expect(mockPick).toHaveBeenCalledWith(expect.objectContaining({ copyToCacheDirectory: true, multiple: true }));
+    expect(cachedFiles()).toEqual([]);
+    expect(mockOpenHandles).toBe(0);
+  } finally { Platform.OS = previousOS; }
+});

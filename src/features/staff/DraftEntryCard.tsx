@@ -48,7 +48,7 @@ export function DraftEntryCard() {
         </View>
         <View style={[styles.fields, split && styles.fieldsSplit]}>
           <PhotoMetadataFields presentation="compact" value={w.fields} terms={draft.terms} rooms={draft.rooms} photos={draft.photos} language={language} disabled={w.busy}
-            onChange={w.setFields}
+            onChange={value => w.setFields(value)}
             onAddTerm={w.startTerm} onAddRoom={w.startRoom} onDeleteOptions={w.deleteOptions} pickerFeedback={<WorkspaceFeedback area="entry" />} onManage={w.clearEntryFeedback}
             onPickerVisibilityChange={visible => { setPickerOpen(visible); if (visible) w.clearEntryFeedback(); }}
             roomEditor={w.inlineRoom ? <>

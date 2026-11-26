@@ -1,9 +1,8 @@
 import { useMemo, useState, type ReactNode } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { Button, Chip, TextField, colors, spaceLabel, tx, typography } from '../../components/ui';
-import { type Language, type Labels, type Photo, type RoomDefinition, type Term, type TermKind } from '../../domain/types';
+import { Button, Chip, TextField, colors, optionLabel, spaceLabel, tx, typography } from '../../components/ui';
+import { type Language, type Labels, type Photo, type PhotoAssignments, type PhotoField, type RoomDefinition, type Term, type TermKind } from '../../domain/types';
 import { kindLabel, staffStyles as s } from './shared';
-import type { PhotoFieldsValue } from './workspace-context';
 import { SelectionField, type SelectionOption } from './SelectionField';
 
 export function TermLabelFields({ labels, onChange, disabled = false }: { labels: Labels; onChange: (labels: Labels) => void; disabled?: boolean }) {
@@ -23,7 +22,7 @@ function TermChoices({ terms, kind, language, selected, onSelect, disabled }: {
   const currentPage = Math.min(page, Math.max(0, Math.ceil(filtered.length / 30) - 1));
   return <View style={{ gap: 8 }}>
     {terms.length > 18 && <TextField label={`${tx(language, 'Gözleg', 'Поиск')}: ${kindLabel(kind, language)}`} value={search} onChangeText={value => { setSearch(value); setPage(0); }} editable={!disabled} />}
-    <View style={s.row}>{filtered.slice(currentPage * 30, (currentPage + 1) * 30).map(term => <Chip key={term.id} label={term.labels[language]} selected={selected(term.id)} disabled={disabled} onPress={() => onSelect(term.id)} />)}</View>
+    <View style={s.row}>{filtered.slice(currentPage * 30, (currentPage + 1) * 30).map(term => <Chip key={term.id} label={optionLabel(term.labels, language)} selected={selected(term.id)} disabled={disabled} onPress={() => onSelect(term.id)} />)}</View>
     {filtered.length > 30 && <View style={s.row}>
       <Button title={tx(language, 'Öňki tegler', 'Предыдущие теги')} variant="ghost" disabled={disabled || !currentPage} onPress={() => setPage(currentPage - 1)} />
       <Text style={s.label}>{currentPage + 1} / {Math.ceil(filtered.length / 30)}</Text>
@@ -34,7 +33,7 @@ function TermChoices({ terms, kind, language, selected, onSelect, disabled }: {
 }
 
 type PhotoMetadataProps = {
-  value: PhotoFieldsValue; terms: Term[]; rooms: RoomDefinition[]; photos?: Photo[]; language: Language; onChange: (value: PhotoFieldsValue) => void; onAddTerm?: (kind: TermKind) => void; renderTermEditor?: (kind: TermKind) => ReactNode; disabled?: boolean;
+  value: PhotoAssignments; terms: Term[]; rooms: RoomDefinition[]; photos?: Photo[]; language: Language; onChange: (value: PhotoAssignments, field: PhotoField) => void; onAddTerm?: (kind: TermKind) => void; renderTermEditor?: (kind: TermKind) => ReactNode; disabled?: boolean;
   onAddRoom?: () => void; roomEditor?: ReactNode; pickerFeedback?: ReactNode; onManage?: () => void;
   onDeleteOptions?: (kind: 'room' | TermKind, ids: string[]) => Promise<boolean>;
   presentation?: 'chips' | 'compact'; onPickerVisibilityChange?: (visible: boolean) => void;
@@ -46,7 +45,7 @@ export function PhotoMetadataFields(props: PhotoMetadataProps) {
   return <>
     <View style={s.section}>
       <Text style={s.label}>{tx(language, 'Otag', 'Комната')}</Text>
-      <View style={s.row}>{rooms.map(({ id: room }) => <Chip key={room} label={spaceLabel(room, language, rooms)} selected={value.room === room} disabled={disabled} onPress={() => onChange({ ...value, room })} />)}</View>
+      <View style={s.row}>{rooms.map(({ id: room }) => <Chip key={room} label={spaceLabel(room, language, rooms)} selected={value.room === room} disabled={disabled} onPress={() => onChange({ ...value, room }, 'room')} />)}</View>
     </View>
     {(['style', 'palette', 'material', 'detail'] as const).map(kind => {
       const field = kind === 'palette' ? 'paletteIds' : kind === 'material' ? 'materialIds' : 'detailIds';
@@ -54,7 +53,7 @@ export function PhotoMetadataFields(props: PhotoMetadataProps) {
         <Text style={s.label}>{kindLabel(kind, language)}</Text>
         <TermChoices terms={terms.filter(term => term.kind === kind)} kind={kind} language={language} disabled={disabled}
           selected={id => kind === 'style' ? value.styleId === id : value[field].includes(id)}
-          onSelect={id => onChange(kind === 'style' ? { ...value, styleId: id } : { ...value, [field]: value[field].includes(id) ? value[field].filter(value => value !== id) : [...value[field], id] })} />
+          onSelect={id => onChange(kind === 'style' ? { ...value, styleId: id } : { ...value, [field]: value[field].includes(id) ? value[field].filter(value => value !== id) : [...value[field], id] }, kind)} />
         {onAddTerm && <Button title={`${tx(language, '＋ Täze', '＋ Добавить')}: ${kindLabel(kind, language)}`} variant="ghost" disabled={disabled} onPress={() => onAddTerm(kind)} style={{ alignSelf: 'flex-start' }} />}
         {renderTermEditor?.(kind)}
       </View>;
@@ -89,7 +88,7 @@ function CompactPhotoMetadataFields({ value, terms, rooms, photos = [], language
       editorTitle={kind === 'style' ? tx(language, 'Täze stil', 'Новый стиль') : undefined}
       onDelete={onDeleteOptions ? ids => onDeleteOptions(kind, ids) : undefined}
       selectedIds={kind === 'style' ? value.styleId ? [value.styleId] : [] : value[field]}
-      onChange={ids => onChange(kind === 'style' ? { ...value, styleId: ids[0] ?? '' } : { ...value, [field]: ids })}
+      onChange={ids => onChange(kind === 'style' ? { ...value, styleId: ids[0] ?? '' } : { ...value, [field]: ids }, kind)}
       onCreate={onAddTerm ? () => onAddTerm(kind) : undefined} editor={renderTermEditor?.(kind)} onVisibilityChange={onPickerVisibilityChange} />;
   };
   return <>
@@ -98,7 +97,7 @@ function CompactPhotoMetadataFields({ value, terms, rooms, photos = [], language
       <SelectionField label={tx(language, 'Otag', 'Комната')} language={language} options={roomOptions} selectedIds={value.room ? [value.room] : []} disabled={disabled} searchable allowDeselect closeOnSelect={false}
         onCreate={onAddRoom} createLabel={tx(language, '＋ Täze otag', '＋ Новая комната')} editorTitle={tx(language, 'Täze otag', 'Новая комната')} editor={roomEditor} feedback={pickerFeedback} onManage={onManage}
         onDelete={onDeleteOptions ? ids => onDeleteOptions('room', ids) : undefined}
-        onChange={ids => onChange({ ...value, room: ids[0] ?? '' })} onVisibilityChange={onPickerVisibilityChange} />
+        onChange={ids => onChange({ ...value, room: ids[0] ?? '' }, 'room')} onVisibilityChange={onPickerVisibilityChange} />
       {termField('style')}
     </View>
     <View testID="draft-characteristics-section" style={[compact.section, compact.divided]}>

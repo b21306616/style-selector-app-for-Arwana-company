@@ -250,16 +250,49 @@ test('export shares workbook and photo ZIP from one snapshot and can share them 
   expect(shareExport).toHaveBeenNthCalledWith(1, '/cache/catalog.xlsx', false);
   expect(shareExport).toHaveBeenNthCalledWith(2, '/cache/photos.zip', true);
   expect(shareExport).toHaveBeenNthCalledWith(3, '/cache/catalog.xlsx', false);
-  expect(screen.getByText(/Пустые ячейки необходимо заполнить в Excel перед импортом/)).toBeOnTheScreen();
+  expect(screen.getByText(/сохраните книгу Excel и ZIP с фотографиями/)).toBeOnTheScreen();
 });
 
-test('Excel guidance describes both language sheets and six required columns', async () => {
+test('Excel guidance explains clearing cells and replacing images and draft data', async () => {
   await render(<StaffWorkspaceProvider><Probe /></StaffWorkspaceProvider>);
-  expect(screen.getByText(/Для импорта обязательны все шесть столбцов/)).toBeOnTheScreen();
+  expect(screen.getByText(/Russian и Turkmen.*Пустая ячейка очищает поле/)).toBeOnTheScreen();
   expect(screen.getByText('Image filename · Room · Style · Palette · Material · Detail')).toBeOnTheScreen();
   await fireEvent.press(screen.getByRole('button', { name: 'Импорт из Excel' }));
-  expect(screen.getByText(/Совпадающее имя использует сохранённое изображение/)).toBeOnTheScreen();
-  expect(screen.getByText(/Все записи вне Excel будут удалены/)).toBeOnTheScreen();
+  expect(screen.getByText(/выберите новый файл с тем же именем/)).toBeOnTheScreen();
+  expect(screen.getByText(/Книга полностью заменит черновик/)).toBeOnTheScreen();
+});
+
+test.each([
+  ['ru', 'Импорт из Excel', 'Сохранить импорт в черновик', 'Очистить весь черновик?', 'Вернуться к проверке', 'Очистить черновик'],
+  ['tk', 'Excel-den import', 'Importy garalama ýazdyrmak', 'Garalamany doly arassalamalymy?', 'Syna dolanmak', 'Garalamany arassalamak'],
+] as const)('a template clears the draft only after explicit confirmation in %s', async (language, pick, save, title, cancel, confirm) => {
+  app.language = language;
+  const before = cloneCatalog(app.draft!);
+  jest.mocked(pickWorkbook).mockResolvedValue({ name: 'template.xlsx', workbook: decodeWorkbook(encodeWorkbook()) });
+  await render(<StaffWorkspaceProvider><Probe /></StaffWorkspaceProvider>);
+  await fireEvent.press(screen.getByRole('button', { name: pick }));
+  await fireEvent.press(screen.getByRole('button', { name: save }));
+  expect(screen.getByText(title)).toBeOnTheScreen();
+  await fireEvent.press(screen.getByRole('button', { name: cancel }));
+  expect(app.draft).toEqual(before);
+  expect(app.saveDraft).not.toHaveBeenCalled();
+  await fireEvent.press(screen.getByRole('button', { name: save }));
+  await fireEvent.press(screen.getByRole('button', { name: confirm }));
+  expect(app.draft).toMatchObject({ photos: [], rooms: [], terms: [], galleries: { whole_house: [] } });
+  expect(app.catalog).toEqual(before);
+});
+
+test('a filename-only photo can be confirmed and saved without any previous room or tags', async () => {
+  const workbook = decodeWorkbook(encodeWorkbook(seedCatalog));
+  const first = workbook.photos[0];
+  workbook.photos = [{ ...first, value: { filename: first.value.filename, room: { ru: '', tk: '' }, style: { ru: '', tk: '' }, palette: [], material: [], detail: [] } }];
+  jest.mocked(pickWorkbook).mockResolvedValue({ name: 'partial.xlsx', workbook });
+  await render(<StaffWorkspaceProvider><Probe /></StaffWorkspaceProvider>);
+  await fireEvent.press(screen.getByRole('button', { name: 'Импорт из Excel' }));
+  expect(screen.getByText(/Черновик можно сохранить сейчас/)).toBeOnTheScreen();
+  await fireEvent.press(screen.getByRole('button', { name: 'Сохранить импорт в черновик' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Заменить черновик' }));
+  expect(app.draft).toMatchObject({ photos: [{ room: '', styleId: '', paletteIds: [], materialIds: [], detailIds: [] }], rooms: [], terms: [], galleries: { whole_house: [] } });
 });
 
 test('unsupported workbook guidance directs staff to download the new template without opening import review', async () => {
@@ -273,21 +306,26 @@ test('unsupported workbook guidance directs staff to download the new template w
 
 test('blocked import review does not display misleading pre-publish tag warnings alongside blocking issues', async () => {
   const workbook = decodeWorkbook(encodeWorkbook(seedCatalog));
-  workbook.photos = [{ ...workbook.photos[0], value: { ...workbook.photos[0].value, room: { ru: '', tk: '' } } }];
+  workbook.photos = [
+    { ...workbook.photos[0], value: { ...workbook.photos[0].value, room: { ru: '', tk: '' } } },
+    { ...workbook.photos[1], value: { ...workbook.photos[1].value, filename: 'needed.jpg' } },
+  ];
   jest.mocked(pickWorkbook).mockResolvedValue({ name: 'broken.xlsx', workbook });
   await render(<StaffWorkspaceProvider><Probe /></StaffWorkspaceProvider>);
   await act(async () => { await controller.chooseWorkbook(); });
   expect(controller.review!.issues.length).toBeGreaterThan(0);
   expect(controller.review!.warnings).toBeGreaterThan(0);
-  expect(screen.queryByText(/Перед публикацией потребуется дополнить теги/)).toBeNull();
+  expect(screen.queryByText(/Черновик можно сохранить сейчас/)).toBeNull();
+  expect(screen.getByRole('button', { name: 'Сохранить импорт в черновик' })).toBeDisabled();
+  expect(app.saveDraft).not.toHaveBeenCalled();
 });
 
-test('Turkmen export copy uses correct unused vocabulary wording', async () => {
+test('Turkmen export copy explains which vocabulary transfers with photos', async () => {
   app.language = 'tk';
   jest.mocked(createExport).mockResolvedValue({ workbook: '/cache/catalog.xlsx', photos: '/cache/photos.zip', directory: '/cache/export' });
   await render(<StaffWorkspaceProvider><Probe /></StaffWorkspaceProvider>);
   await fireEvent.press(screen.getByRole('button', { name: 'Excel-e eksport' }));
-  expect(screen.getByText(/ulanylmaýan otaglar, tegler/)).toBeOnTheScreen();
+  expect(screen.getByText(/suratlarda ulanylýan otaglar we tegler/)).toBeOnTheScreen();
 });
 
 test('import review can display a newly created room before it exists in the draft', async () => {

@@ -1,7 +1,7 @@
 import * as Crypto from 'expo-crypto';
 import { useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
-import { Button, Chip, ErrorBanner, Header, Screen, TextField, typography, tx, useLayout } from '../../components/ui';
+import { Button, Chip, ErrorBanner, Header, Screen, TextField, typography, optionLabel, tx, useLayout } from '../../components/ui';
 import { PhotoTile } from '../../components/PhotoTile';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { AppModal } from '../../components/AppModal';
@@ -49,7 +49,8 @@ export default function Vocabulary() {
         <Button title={t('＋ Termin goşmak', '＋ Добавить термин')} onPress={() => { setEditing({ id: Crypto.randomUUID(), kind, labels: { tk: '', ru: '' } }); setError(null); }} />
       </View>} ListEmptyComponent={<Text style={typography.body}>{t('Gabat gelýän termin ýok.', 'Подходящих терминов нет.')}</Text>} renderItem={({ item }) => {
         const example = draft.photos.find(photo => item.kind === 'style' ? photo.styleId === item.id : item.kind === 'palette' ? photo.paletteIds.includes(item.id) : item.kind === 'material' ? photo.materialIds.includes(item.id) : photo.detailIds.includes(item.id));
-        return <PhotoTile photo={example} language={language} title={item.labels[language]} label={item.labels[language]} onPress={() => { setEditing({ ...item, labels: { ...item.labels } }); setError(null); }} style={{ width: (contentWidth - (columns - 1) * 12) / columns, marginBottom: 12 }} />;
+        const name = optionLabel(item.labels, language);
+        return <PhotoTile photo={example} language={language} title={name} label={name} onPress={() => { setEditing({ ...item, labels: { ...item.labels } }); setError(null); }} style={{ width: (contentWidth - (columns - 1) * 12) / columns, marginBottom: 12 }} />;
       }} />
     <AppModal visible={!!editing} animationType="slide" onRequestClose={close}>{editing && <Screen>
       <Header back={{ label: t('Sözlük', 'Словарь'), onPress: close }} />

@@ -1,13 +1,14 @@
 import { useMemo, useState } from 'react';
 import { router } from 'expo-router';
 import { Text, View } from 'react-native';
-import { Button, Chip, ErrorBanner, typography, spaceLabel, tx } from '../../components/ui';
+import { Button, Chip, ErrorBanner, typography, photoRoomLabel, spaceLabel, tx } from '../../components/ui';
 import { PhotoStrip } from '../../components/PhotoTile';
 import { Disclosure } from '../../components/Disclosure';
 import { useApp } from '../../state/AppProvider';
 import { validateCatalog } from '../../domain/catalog';
 import { messageForError } from '../../domain/errors';
 import { catalogSpaces } from '../../domain/rooms';
+import { photoFieldsForLanguage } from '../../domain/photo-metadata';
 import { StaffScreen, staffStyles as s } from '../../features/staff/shared';
 
 export default function Preview() {
@@ -20,7 +21,7 @@ export default function Preview() {
   const byId = new Map(draft.photos.map(photo => [photo.id, photo]));
   const subjectLabel = (id: string) => {
     const photo = byId.get(id);
-    if (photo) return `${spaceLabel(photo.room, language, draft.rooms)} · ${t('surat', 'фото')} ${draft.photos.indexOf(photo) + 1}`;
+    if (photo) return `${photoRoomLabel(photo, language, draft.rooms)} · ${t('surat', 'фото')} ${draft.photos.indexOf(photo) + 1}`;
     const term = draft.terms.find(item => item.id === id);
     if (term) return term.labels[language] || t('Atlandyrylmadyk termin', 'Термин без названия');
     if (catalogSpaces(draft).includes(id)) return spaceLabel(id, language, draft.rooms);
@@ -34,7 +35,10 @@ export default function Preview() {
     {catalogSpaces(draft).map(space => {
       const photos = draft.galleries[space].map(id => byId.get(id)).filter(photo => !!photo);
       const counts = new Map<string, number>();
-      photos.forEach(photo => counts.set(photo.styleId, (counts.get(photo.styleId) ?? 0) + 1));
+      photos.forEach(photo => {
+        const { styleId } = photoFieldsForLanguage(photo, language);
+        counts.set(styleId, (counts.get(styleId) ?? 0) + 1);
+      });
       const needsAttention = issues.some(issue => issue.subject === space || photos.some(photo => [photo.id, photo.styleId, ...photo.paletteIds, ...photo.materialIds, ...photo.detailIds].includes(issue.subject)));
       return <View key={space} style={s.card}>
         <View style={[s.row, { justifyContent: 'space-between' }]}><Text style={typography.subheading}>{spaceLabel(space, language, draft.rooms)}</Text><Chip label={photos.length + ' ' + t('surat', 'фото')} /></View>

@@ -43,6 +43,26 @@ test('changing a photo room removes it from its former room gallery while preser
   expect(saved.galleries.whole_house).toContain(id);
 });
 
+test('staff can give a roomless imported photo its first room and fill only the chosen translation', async () => {
+  const draft = app.draft!;
+  const photo = { ...draft.photos[0], room: '', blankTranslations: { style: 'tk', material: 'ru' } as const };
+  draft.photos = [photo];
+  for (const space of Object.keys(draft.galleries)) draft.galleries[space] = [];
+  jest.mocked(app.saveDraft).mockImplementation(async change => { app.draft = typeof change === 'function' ? change(app.draft!) : change; });
+  await render(<Photos />);
+  await fireEvent.press(screen.getByRole('button', { name: 'Saýlanmady, Tegler gerek' }));
+  expect(screen.getByRole('button', { name: 'Skandinaw' })).not.toBeSelected();
+  await fireEvent.press(screen.getAllByRole('button', { name: 'Aşhana' }).at(-1)!);
+  await fireEvent.press(screen.getByRole('button', { name: 'Suraty ýatda sakla' }));
+  expect(app.draft!.photos[0]).toMatchObject({ room: 'kitchen', styleId: photo.styleId, blankTranslations: photo.blankTranslations });
+  expect(app.draft!.galleries['']).toBeUndefined();
+  await fireEvent.press(screen.getByRole('button', { name: 'Aşhana, Tegler gerek' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Skandinaw' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Suraty ýatda sakla' }));
+  expect(app.draft!.photos[0].blankTranslations).toEqual({ material: 'ru' });
+  expect(screen.getByRole('button', { name: 'Aşhana, Skandinaw' })).toBeOnTheScreen();
+});
+
 test('a referenced term cannot be deleted, and saving requires both language labels', async () => {
   await render(<Vocabulary />);
   await fireEvent.press(screen.getByText('Skandinaw'));
@@ -58,6 +78,13 @@ test('publication is disabled for an untagged selected photo and presents a frie
   expect(screen.getByRole('button', { name: 'Bu toplumlary çap etmek' })).toBeDisabled();
   expect(screen.getByText(/Bar bolan stili saýlaň.*Wanna otagy · surat 1/)).toBeOnTheScreen();
   expect(app.publishDraft).not.toHaveBeenCalled();
+});
+
+test('a missing translation on a gallery photo blocks publication even with a complete shared style', async () => {
+  app.draft!.photos[0].blankTranslations = { style: 'tk' };
+  await render(<Preview />);
+  expect(screen.getByRole('button', { name: 'Bu toplumlary çap etmek' })).toBeDisabled();
+  expect(screen.getByText(/Bu suratyň ýetmeýän terjimelerini dolduryň.*surat 1/)).toBeOnTheScreen();
 });
 
 test('staff publication reports success only after the save resolves', async () => {

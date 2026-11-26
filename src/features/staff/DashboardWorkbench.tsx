@@ -17,12 +17,13 @@ export function DashboardWorkbench() {
   const t = (tk: string, ru: string) => tx(language, tk, ru);
   if (!draft) return null;
   const page = Math.min(issuePage, Math.max(0, Math.ceil((w.review?.issues.length ?? 0) / 25) - 1));
+  const emptyImport = w.review?.issues.length === 0 && w.review.catalog.photos.length === 0;
   return <>
     <View style={styles.transferCard}>
       <Text accessibilityRole="header" style={typography.subheading}>{t('Excel bilen işlemek', 'Работа с Excel')}</Text>
-      <Text style={typography.small}>{t('Russian we Turkmen sahypalarynda her suratyň maglumatlaryny degişli dilde dolduryň. Import üçin alty sütüniň hemmesi hökmany.', 'Заполните сведения о каждом фото на двух листах: Russian — по-русски, Turkmen — по-туркменски. Для импорта обязательны все шесть столбцов.')}</Text>
+      <Text style={typography.small}>{t('Her suratyň faýl adyny Russian we Turkmen sahypalarynyň ikisinde-de ýazyň. Boş öýjük şol suratyň degişli dildäki maglumatyny garalamadan aýyrýar.', 'Укажите имя файла каждого фото на обоих листах Russian и Turkmen. Пустая ячейка очищает поле этого фото на языке листа.')}</Text>
       <Text style={typography.small}>Image filename · Room · Style · Palette · Material · Detail</Text>
-      <Text style={typography.small}>{t('Iki sahypada-da şol bir faýl atlaryny ulanyň. Bir stil ýazyň; palitranyň, materialyň we detalyň birnäçe adyny nokatly otur bilen aýryň. Terjimeleri şol bir tertipde ýazyň.', 'На обоих листах используйте одинаковые имена файлов. Укажите один стиль; несколько названий палитры, материалов и деталей разделяйте точкой с запятой. Переводы перечисляйте в том же порядке.')}</Text>
+      <Text style={typography.small}>{t('Bir stil ýazyp bilersiňiz. Palitranyň, materialyň we detalyň atlaryny nokatly otur bilen aýryň. Iki sanaw hem doldurylsa, atlaryň sany we tertibi gabat gelmeli.', 'Можно указать один стиль. Названия палитр, материалов и деталей разделяйте точкой с запятой. Если заполнены оба списка, количество и порядок названий должны совпадать.')}</Text>
       <View style={[styles.actions, fontScale >= 1.5 && styles.stacked]}>
         <Button title={t('Excel-den import', 'Импорт из Excel')} variant="secondary" onPress={() => { setIssuePage(0); void w.chooseWorkbook(); }} disabled={w.busy} style={styles.action} />
         <Button title={t('Excel-e eksport', 'Экспорт в Excel')} variant="secondary" onPress={() => void w.exportDraft()} disabled={w.busy} style={styles.action} />
@@ -31,7 +32,7 @@ export function DashboardWorkbench() {
       {w.template && <Button title={t('Excel şablonyny saklamak / paýlaşmak', 'Сохранить / отправить шаблон Excel')} variant="secondary" onPress={() => void w.share(w.template!.workbook)} disabled={w.busy} />}
       {w.exports && <View style={styles.output}>
         <Text style={s.label}>{t('Eksport taýýar', 'Экспорт готов')}</Text>
-        <Text style={typography.small}>{t('Başga enjamda açmak üçin iki faýly hem saklaň. Boş öýjükleri Excel-de dolduryp, soňra import ediň. Kitap surat maglumatlaryny we suratlary geçirýär; ulanylmaýan otaglar, tegler we toplumlaryň aýratyn tertibi saklanmaýar.', 'Для переноса на другое устройство сохраните оба файла. Пустые ячейки необходимо заполнить в Excel перед импортом. Книга переносит описания и изображения; неиспользуемые комнаты, теги и отдельный порядок подборок не сохраняются.')}</Text>
+        <Text style={typography.small}>{t('Başga enjama geçirmek üçin Excel kitabyny we suratly ZIP faýly saklaň. Kitaba diňe suratlarda ulanylýan otaglar we tegler girýär.', 'Для переноса на другое устройство сохраните книгу Excel и ZIP с фотографиями. В книгу входят комнаты и теги, указанные у фотографий.')}</Text>
         <View style={[styles.actions, fontScale >= 1.5 && styles.stacked]}>
           <Button title={t('Excel faýlyny saklamak / paýlaşmak', 'Сохранить / отправить Excel')} variant="secondary" onPress={() => void w.share(w.exports!.workbook)} disabled={w.busy} style={styles.action} />
           {w.exports.photos && <Button title={t('Surat ZIP-ini saklamak / paýlaşmak', 'Сохранить / отправить ZIP с фото')} variant="secondary" onPress={() => void w.share(w.exports!.photos!, true)} disabled={w.busy} style={styles.action} />}
@@ -43,16 +44,18 @@ export function DashboardWorkbench() {
     {w.book && w.review && <View style={s.card}>
       <Text accessibilityRole="header" style={typography.subheading}>{t('Importy barlamak', 'Проверка импорта')}</Text>
       <Text style={typography.small}>{w.book.name}</Text>
-      <Text style={typography.small}>{t('Täze suratlar üçin atlary Excel-e gabat gelýän faýllary saýlaň. Gabat gelýän faýl ady saklanan şekili ulanýar, ýöne ähli garalama maglumatlary Excel-den täzeden döredilýär. Üýtgeşmeler ilki garalama ýazylýar.', 'Для новых фото выберите файлы с именами из Excel. Совпадающее имя использует сохранённое изображение, но все данные черновика заново создаются из Excel. Изменения сначала сохраняются в черновик.')}</Text>
-      <Button title={t('ZIP ýa-da suratlary saýlamak', 'Выбрать ZIP или фотографии')} variant="secondary" onPress={() => void w.chooseImages()} disabled={w.busy} />
-      <Text style={typography.small}>{t('Taýýar suratlar', 'Подготовлено фотографий')}: {w.images.size}</Text>
-      <Text style={typography.small}>{t('Excel-de ýok ähli ýazgylar aýrylar. Otag toplumlary Russian sahypasynyň tertibinde dörediler, «Bütin jaý» boş bolar. Çap edilen katalog üýtgemez.', 'Все записи вне Excel будут удалены. Комнатные подборки будут созданы в порядке листа Russian, а «Весь дом» останется пустым. Опубликованный каталог сохранится.')}</Text>
+      {!emptyImport && <>
+        <Text style={typography.small}>{t('Täze suratlar üçin Excel-de görkezilen atlar bilen faýllary saýlaň. Ady gabat gelse, saklanan surat ulanylar. Ony çalyşmak üçin şol at bilen täze faýly saýlaň.', 'Для новых фото выберите файлы с именами из Excel. При совпадении имени используется сохранённое изображение. Для его замены выберите новый файл с тем же именем.')}</Text>
+        <Button title={t('ZIP ýa-da suratlary saýlamak', 'Выбрать ZIP или фотографии')} variant="secondary" onPress={() => void w.chooseImages()} disabled={w.busy} />
+        <Text style={typography.small}>{t('Taýýar suratlar', 'Подготовлено фотографий')}: {w.images.size}</Text>
+      </>}
+      <Text style={typography.small}>{t('Garalama tutuşlygyna kitapdaky maglumatlar bilen çalşylar. Otag toplumlary Russian sahypasynyň tertibinde dörediler, «Bütin jaý» boş bolar.', 'Книга полностью заменит черновик. Комнатные подборки будут собраны в порядке листа Russian. Подборка «Весь дом» будет пустой.')}</Text>
       <View style={styles.stats}>
-        {[ [t('Goşular', 'Добавится'), w.review.added], [t('Aýrylar', 'Удалится'), w.review.removed] ].map(([label, count]) => <View style={styles.stat} key={label}><Text style={styles.statNumber}>{count}</Text><Text style={typography.small}>{label}</Text></View>)}
+        {[ [t('Häzirki ýazgylar', 'Записей сейчас'), w.review.removed], [t('Importdan soňky ýazgylar', 'Записей после импорта'), w.review.added] ].map(([label, count]) => <View style={styles.stat} key={label}><Text style={styles.statNumber}>{count}</Text><Text style={typography.small}>{label}</Text></View>)}
       </View>
       <Text style={typography.small}>{t('Netije', 'После импорта')}: {w.review.catalog.photos.length} {t('surat', 'фото')} · {w.review.catalog.terms.length} {t('termin', 'терминов')}</Text>
       {catalogSpaces(w.review.catalog).map(space => <View key={space} style={styles.summaryRow}><Text style={[typography.small, { flex: 1 }]}>{spaceLabel(space, language, w.review!.catalog.rooms)}</Text><Text style={s.label}>{draft.galleries[space]?.length ?? 0} → {w.review!.catalog.galleries[space].length}</Text></View>)}
-      {w.review.issues.length === 0 && w.review.warnings > 0 && <Text style={typography.small}>{t('Çap etmezden ozal tegleri tamamlamak gerek. Ähli meseleler çap ediş synynda görkeziler.', 'Перед публикацией потребуется дополнить теги. Все замечания будут доступны на экране проверки публикации.')}</Text>}
+      {w.review.issues.length === 0 && w.review.warnings > 0 && <Text style={typography.small}>{t('Garalamany häzir saklap bilersiňiz. Çap etmezden ozal ýetmeýän maglumatlary dolduryň.', 'Черновик можно сохранить сейчас. Перед публикацией заполните недостающие данные.')}</Text>}
       {w.review.issues.length > 0 && <View style={styles.issues} accessibilityLiveRegion="polite">
         <Text style={s.label}>{t('Düzetmeli meseleler', 'Исправьте ошибки')}: {w.review.issues.length}</Text>
         {w.review.issues.slice(page * 25, (page + 1) * 25).map((issue, index) => <Text key={`${page}-${index}`} style={styles.issue}>{issue.sheet}{issue.row ? ` · ${t('setir', 'строка')} ${issue.row}` : ''}{issue.column ? ` · ${issue.column}` : ''}: {issue.labels[language]}</Text>)}
@@ -66,7 +69,13 @@ export function DashboardWorkbench() {
     </View>}
 
     <DraftEntryCard />
-    <ConfirmDialog visible={w.confirmReplace} language={language} loading={w.busy} title={t('Ähli garalamany çalyşmalymy?', 'Заменить весь черновик?')} description={t(`Excel-de ýok ýazgylar aýrylar: ${w.review?.removed ?? 0}. Çap edilen katalog we müşderi seanslary saklanar.`, `Записей вне Excel будет удалено: ${w.review?.removed ?? 0}. Опубликованный каталог и сеансы клиентов сохранятся.`)} confirmLabel={t('Garalamany çalyşmak', 'Заменить черновик')} cancelLabel={t('Syna dolanmak', 'Вернуться к проверке')} onCancel={() => w.setConfirmReplace(false)} onConfirm={() => void w.applyImport()} />
+    <ConfirmDialog visible={w.confirmReplace} language={language} loading={w.busy}
+      title={emptyImport ? t('Garalamany doly arassalamalymy?', 'Очистить весь черновик?') : t('Ähli garalamany çalyşmalymy?', 'Заменить весь черновик?')}
+      description={emptyImport
+        ? t('Kitapda surat ýok. Garalamadaky ähli suratlar, otaglar, stiller, palitralar, materiallar, detallar we toplumlaryň mazmuny aýrylar.', 'В книге нет фото. Из черновика будут удалены все фотографии, комнаты, стили, палитры, материалы, детали и содержимое подборок.')
+        : t('Garalamada diňe şu kitapdaky suratlar we maglumatlar saklanar. Katalog aýratyn çap edilýär.', 'В черновике будут только фотографии и данные из этой книги. Каталог публикуется отдельно.')}
+      confirmLabel={emptyImport ? t('Garalamany arassalamak', 'Очистить черновик') : t('Garalamany çalyşmak', 'Заменить черновик')}
+      cancelLabel={t('Syna dolanmak', 'Вернуться к проверке')} onCancel={() => w.setConfirmReplace(false)} onConfirm={() => void w.applyImport()} />
   </>;
 }
 

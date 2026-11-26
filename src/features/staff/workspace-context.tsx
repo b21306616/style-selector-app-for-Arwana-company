@@ -6,13 +6,12 @@ import { addDraftPhoto, addDraftTerm, draftFingerprint, previewImport, TRANSFER_
 import { AppError } from '../../domain/errors';
 import { addDraftRoom, removeDraftOptions } from '../../domain/catalog';
 import { hasRoom } from '../../domain/rooms';
-import type { Photo, RoomDefinition, Space, Term, TermKind } from '../../domain/types';
+import type { Photo, PhotoAssignments, RoomDefinition, Space, Term, TermKind } from '../../domain/types';
 import { createExport, discardExport, pickImportImages, pickWorkbook, shareExport, type ExportFiles } from '../../storage/catalog-files';
 import { assertCatalogImages, discardPreparedPhotos, pickDraftPhoto } from '../../storage/images';
 
-export type PhotoFieldsValue = Pick<Photo, 'room' | 'styleId' | 'paletteIds' | 'materialIds' | 'detailIds'>;
 export type FeedbackArea = 'entry' | 'transfer';
-const emptyFields = (): PhotoFieldsValue => ({ room: '', styleId: '', paletteIds: [], materialIds: [], detailIds: [] });
+const emptyFields = (): PhotoAssignments => ({ room: '', styleId: '', paletteIds: [], materialIds: [], detailIds: [] });
 const emptyTerm = (kind: TermKind = 'style'): Term => ({ id: Crypto.randomUUID(), kind, labels: { ru: '', tk: '' } });
 const emptyRoom = (): RoomDefinition => ({ id: Crypto.randomUUID(), labels: { ru: '', tk: '' } });
 

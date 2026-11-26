@@ -3,6 +3,7 @@ import { Unzip, UnzipInflate } from 'fflate';
 import { AppError } from '../domain/errors';
 import { filenameKey, TRANSFER_LIMITS, transferIssue, validFilename, type CatalogWorkbook, type TransferIssue } from '../domain/catalog-transfer';
 import { normalizePhotoFilenames } from '../domain/photo-filenames';
+import { photoFieldsForLanguage } from '../domain/photo-metadata';
 import { readZipIndex, updateCrc } from '../domain/zip';
 import type { Catalog, Labels, Language, TermKind } from '../domain/types';
 
@@ -86,7 +87,8 @@ const writeList = (values: string[]) => values.map(value => /[;"\r\n]/.test(valu
 export function decodeWorkbook(bytes: Uint8Array): CatalogWorkbook {
   validateArchive(bytes);
   let book: XLSX.WorkBook;
-  try { book = XLSX.read(bytes, { type: 'array', cellFormula: true }); }
+  // Keep formula cells that Excel saved without a cached result.
+  try { book = XLSX.read(bytes, { type: 'array', cellFormula: true, sheetStubs: true }); }
   catch { throw new AppError('INVALID_WORKBOOK'); }
   if (
     book.SheetNames.length !== 2 ||
@@ -106,7 +108,7 @@ export function decodeWorkbook(bytes: Uint8Array): CatalogWorkbook {
     for (const [address, cell] of Object.entries(source)) {
       if (!/^[A-Z]+[1-9]\d*$/.test(address)) continue;
       const position = XLSX.utils.decode_cell(address);
-      const meaningful = !!(cell.f || cell.t === 'e' || (cell.v !== undefined && cell.v !== null && String(cell.v).trim() !== ''));
+      const meaningful = !!(cell.f || cell.F || cell.t === 'e' || (cell.t !== 'z' && cell.v != null && String(cell.v).trim() !== ''));
       if (position.r > 0 && position.c < WORKBOOK_HEADERS.length && meaningful) dataRows.add(position.r);
       if (position.c >= WORKBOOK_HEADERS.length && meaningful) {
         problem(sheet, position.r + 1, XLSX.utils.encode_col(position.c), 'В шаблоне только шесть столбцов. Удалите лишний столбец.', 'Şablonda diňe alty sütün bar. Artykmaç sütüni aýryň.');
@@ -115,7 +117,7 @@ export function decodeWorkbook(bytes: Uint8Array): CatalogWorkbook {
     let correctHeaders = true;
     for (const [column, name] of WORKBOOK_HEADERS.entries()) {
       const cell = source[XLSX.utils.encode_cell({ r: 0, c: column })];
-      if (cell?.v !== name || cell?.f || cell?.t === 'e') {
+      if (cell?.v !== name || cell?.f || cell?.F || cell?.t === 'e') {
         problem(sheet, 1, name, `Заголовок столбца должен быть «${name}».`, `Sütüniň ady «${name}» bolmaly.`);
         correctHeaders = false;
       }
@@ -129,12 +131,11 @@ export function decodeWorkbook(bytes: Uint8Array): CatalogWorkbook {
       const values = {} as Record<Column, string>;
       for (const [column, name] of WORKBOOK_HEADERS.entries()) {
         const cell = cells[column];
-        if (cell?.f || cell?.t === 'e') problem(sheet, row, name, 'Используйте значения, без формул и ошибок Excel.', 'Excel formulalarynyň we ýalňyşlyklarynyň ýerine bahalary ulanyň.');
-        values[name] = String(cell?.v ?? '').trim().normalize('NFC');
-        if (!values[name]) problem(sheet, row, name, 'Заполните это поле на обоих листах.', 'Bu meýdany iki sahypada hem dolduryň.');
+        if (cell?.f || cell?.F || cell?.t === 'e') problem(sheet, row, name, 'Используйте значения, без формул и ошибок Excel.', 'Excel formulalarynyň we ýalňyşlyklarynyň ýerine bahalary ulanyň.');
+        values[name] = cell?.t === 'z' ? '' : String(cell?.v ?? '').trim().normalize('NFC');
         if (values[name].length > 4000) problem(sheet, row, name, 'Значение слишком длинное.', 'Baha gaty uzyn.');
       }
-      if (values['Image filename'] && !validFilename(values['Image filename'])) problem(sheet, row, 'Image filename', 'Укажите имя изображения с расширением, без папок.', 'Papkalarsyz, giňeltmesi bilen surat faýlynyň adyny görkeziň.');
+      if (!validFilename(values['Image filename'])) problem(sheet, row, 'Image filename', 'Укажите имя изображения с расширением, без папок.', 'Papkalarsyz, giňeltmesi bilen surat faýlynyň adyny görkeziň.');
       for (const column of ['Room', 'Style'] as const) {
         if (values[column].length > 100) problem(sheet, row, column, 'Название должно содержать не более 100 символов.', 'At 100 nyşandan uzyn bolmaly däl.');
       }
@@ -177,7 +178,9 @@ export function decodeWorkbook(bytes: Uint8Array): CatalogWorkbook {
       if (ruList.length > 0 && tkList.length > 0 && ruList.length !== tkList.length) {
         for (const [language, source] of [['ru', ru], ['tk', tk]] as const) problem(sheets[language], source.row, column, 'Укажите одинаковое число названий в одинаковом порядке на обоих листах.', 'Iki sahypada hem atlaryň sany we tertibi deň bolmaly.');
       }
-      return ruList.map((value, index) => ({ ru: value, tk: tkList[index] ?? '' }));
+      return Array.from({ length: Math.max(ruList.length, tkList.length) }, (_, index) => ({
+        ru: ruList[index] ?? '', tk: tkList[index] ?? '',
+      }));
     };
     photos.push({ row: ru.row, rows: { ru: ru.row, tk: tk.row }, value: {
       filename: ru.values['Image filename'], room: labels('Room'), style: labels('Style'), palette: list('Palette'), material: list('Material'), detail: list('Detail'),
@@ -197,12 +200,15 @@ export function encodeWorkbook(input?: Catalog): Uint8Array {
     const label = (id: string, kind: TermKind) => terms.get(id)?.kind === kind ? terms.get(id)!.labels[language] : '';
     const data = [
       [...WORKBOOK_HEADERS],
-      ...(catalog?.photos.map(photo => [
-        photo.exportFilename!, rooms.get(photo.room)?.[language] ?? '', label(photo.styleId, 'style'),
-        writeList(photo.paletteIds.map(id => label(id, 'palette')).filter(Boolean)),
-        writeList(photo.materialIds.map(id => label(id, 'material')).filter(Boolean)),
-        writeList(photo.detailIds.map(id => label(id, 'detail')).filter(Boolean)),
-      ]) ?? []),
+      ...(catalog?.photos.map(photo => {
+        const fields = photoFieldsForLanguage(photo, language);
+        return [
+          photo.exportFilename!, rooms.get(fields.room)?.[language] ?? '', label(fields.styleId, 'style'),
+          writeList(fields.paletteIds.map(id => label(id, 'palette')).filter(Boolean)),
+          writeList(fields.materialIds.map(id => label(id, 'material')).filter(Boolean)),
+          writeList(fields.detailIds.map(id => label(id, 'detail')).filter(Boolean)),
+        ];
+      }) ?? []),
     ];
     const sheet = XLSX.utils.aoa_to_sheet(data);
     sheet['!cols'] = [24, 24, 30, 40, 36, 40].map(wch => ({ wch }));

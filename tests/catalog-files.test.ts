@@ -148,13 +148,14 @@ test('export keeps canonical JPEG filenames aligned with image bytes after reord
   expect(mockOpenHandles).toBe(0);
 });
 
-test('an incomplete draft can be exported for completion without losing its image', async () => {
+test('an incomplete draft exports an importable workbook and its matching image', async () => {
   const catalog = cloneCatalog(seedCatalog);
   catalog.photos = [{ ...catalog.photos[0], styleId: '', paletteIds: [], materialIds: [], detailIds: [] }];
   mockPut('/bundled/sample.jpg', new Uint8Array([1, 2, 3]));
   const files = await createExport(catalog, jest.fn());
   const book = decodeWorkbook(mockData(files.workbook));
-  expect(book.issues.length).toBeGreaterThan(0);
+  expect(book.issues).toEqual([]);
+  expect(book.photos[0].value).toMatchObject({ filename: 'photo-0001.jpg', style: { ru: '', tk: '' }, palette: [], material: [], detail: [] });
   expect(Object.keys(unzipSync(mockData(files.photos!)))).toEqual(['photos/photo-0001.jpg']);
   expect(mockOpenHandles).toBe(0);
 });

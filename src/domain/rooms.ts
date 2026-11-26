@@ -10,7 +10,13 @@ export const defaultRooms: RoomDefinition[] = [
 
 export const nameKey = (name: string) => name.trim().normalize('NFC').toLocaleLowerCase('en-US');
 export const cleanLabels = (labels: Labels): Labels => ({ ru: labels.ru.trim().normalize('NFC'), tk: labels.tk.trim().normalize('NFC') });
-export const validLabels = (labels: Labels) => (['ru', 'tk'] as const).every(language => typeof labels?.[language] === 'string' && !!labels[language].trim() && labels[language].trim().length <= 100);
+export function validDraftLabels(labels: Labels): boolean {
+  if (typeof labels?.ru !== 'string' || typeof labels?.tk !== 'string') return false;
+  const ru = labels.ru.trim();
+  const tk = labels.tk.trim();
+  return !!(ru || tk) && ru.length <= 100 && tk.length <= 100;
+}
+export const validLabels = (labels: Labels) => validDraftLabels(labels) && !!labels.ru.trim() && !!labels.tk.trim();
 export const sameName = (a: Labels, b: Labels) => (['ru', 'tk'] as const).some(language => nameKey(a[language]) === nameKey(b[language]));
 export const validRoomId = (id: unknown): id is string => typeof id === 'string' && /^[a-zA-Z0-9_-]{1,120}$/.test(id) && !['whole_house', 'all', '__proto__', 'constructor', 'prototype'].includes(id);
 export const catalogSpaces = (catalog: Pick<Catalog, 'rooms'>) => ['whole_house', ...catalog.rooms.map(room => room.id)];

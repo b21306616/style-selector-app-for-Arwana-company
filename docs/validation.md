@@ -2,11 +2,11 @@
 
 Implementation checks were run on Windows with Node 26.13.1, Expo SDK 58, and React Native 0.88.1 on 17 November 2026. Android and iOS are the target platforms. This record distinguishes automated checks, user-confirmed device checks, and the acceptance work still pending.
 
-## Simplified Excel format — 25 November 2026
+## Excel draft replacement — 26 November 2026
 
-The transfer format uses only `Russian` and `Turkmen` sheets with the six readable columns shown in the staff guide. All six values are required for every imported photo in both languages, while incomplete exports remain available for completion. Import replaces the complete draft, reuses a matching saved image when available, rebuilds room galleries from the Russian-sheet order, and leaves Whole House empty. A valid headers-only workbook clears the draft after confirmation. Dashboard guidance and the manual acceptance walkthrough describe these semantics.
+The six-column template requires a matching filename on both sheets for each photo. The other five cells may be blank in either language. After confirmation, a partial workbook clears omitted data and a headers-only workbook clears the whole draft. Room galleries follow Russian-sheet order, roomless photos stay in the library, and Whole House starts empty.
 
-The automated checks cover exact `['Russian', 'Turkmen']` visible sheet order, strict `INVALID_WORKBOOK` rejection for invalid workbooks, blank rows, required cells, vocabulary limits, filename allocation, workbook/photo ZIP agreement, replacement galleries, stale-review protection, draft persistence, and Russian/Turkmen dashboard guidance. Physical Android/iOS picker, share-sheet, Excel-editing, and large-transfer acceptance remain pending. See [device-preview.md](device-preview.md).
+Automated checks exercise blank rows and cells, one-sided lists, translation conflicts, filename matching, missing images, draft reloads, and workbook re-export. Confirmation tests cover Russian and Turkmen. The device walkthrough covers native pickers and sharing. [Device acceptance walkthrough](device-preview.md)
 
 ## Staff dashboard and Excel update — 22 November 2026
 

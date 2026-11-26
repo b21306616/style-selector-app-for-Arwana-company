@@ -67,6 +67,10 @@ test('PNG and JPEG imports sharing a stem keep distinct identities and reimport 
   expect(previewImport(imported.catalog, book(canonical), new Map()).issues).toEqual([]);
   const duplicate = previewImport(imported.catalog, book(png, canonical), new Map());
   expect(duplicate.issues).toContainEqual(expect.objectContaining({ column: 'Image filename' }));
+  const replacement = prepared('second-image');
+  const separate = previewImport(imported.catalog, book(png, canonical), new Map([['living-2.jpg', replacement]]));
+  expect(separate.issues).toEqual([]);
+  expect(separate.catalog.photos.map(photo => photo.image)).toEqual([imported.catalog.photos[0].image, replacement.image]);
 });
 
 test('missing image errors have stable candidates and replacement builds only room galleries', () => {
@@ -108,12 +112,13 @@ test('new tags in one cell seed fresh vocabulary without duplicate-name errors',
   expect(paletteIssues).toEqual([]);
 });
 
-test('decodeWorkbook and previewImport report a single clean issue per blank or mismatched cell', () => {
+test('cleared metadata can be saved to the draft and flagged for publication', () => {
   const draft = current();
   const single = cloneCatalog(draft);
   single.photos = [{ ...single.photos[0], styleId: '', paletteIds: [] }];
   const decoded = decodeWorkbook(encodeWorkbook(single));
   const preview = previewImport(draft, decoded, new Map());
-  expect(preview.issues.filter(issue => issue.sheet === 'Russian' && issue.column === 'Style')).toHaveLength(1);
-  expect(preview.issues.filter(issue => issue.sheet === 'Turkmen' && issue.column === 'Palette')).toHaveLength(1);
+  expect(preview.issues).toEqual([]);
+  expect(preview.warnings).toBeGreaterThan(0);
+  expect(preview.catalog.photos[0]).toMatchObject({ styleId: '', paletteIds: [] });
 });

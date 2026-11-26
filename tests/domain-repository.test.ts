@@ -3,6 +3,8 @@ import { afterEach, beforeEach, expect, jest, test } from '@jest/globals';
 import { addDraftRoom, cloneCatalog, removeDraftOptions } from '../src/domain/catalog';
 import { createSession, rateSession } from '../src/domain/session';
 import type { Catalog } from '../src/domain/types';
+import { previewImport } from '../src/domain/catalog-transfer';
+import { decodeWorkbook, encodeWorkbook } from '../src/storage/workbook';
 
 // Exercise the actual SQL and rollback behavior without a simulator/native bridge.
 jest.mock('expo-sqlite', () => {
@@ -260,4 +262,33 @@ test('replacement saves reset draft content and filename allocation history', as
   expect(saved.photos[0]).toMatchObject({ id: 'replacement-photo', exportFilename: 'photo-0001.jpg', sample: false });
   expect(saved.nextPhotoNumber).toBe(2);
   expect(saved.galleries.whole_house).toEqual([]);
+});
+
+test('partial and empty Excel replacements survive SQLite reloads and preserve the active customer catalog', async () => {
+  const { catalog, draft } = await repository.loadState();
+  const session = createSession(catalog, 'kitchen', 'before-import');
+  await repository.saveSession(session);
+  const book = decodeWorkbook(encodeWorkbook(draft));
+  book.photos = book.photos.slice(0, 2);
+  book.photos[0].value.room = { ru: 'Кабинет', tk: '' };
+  book.photos[1].value.room = { ru: '', tk: 'Başga otag' };
+  book.photos[0].value.style = { ru: 'Модерн', tk: '' };
+  book.photos[1].value.style = { ru: 'Модерн', tk: 'Döwrebap' };
+  book.photos[0].value.detail = [{ ru: '', tk: 'Tekje' }];
+  const partial = previewImport(draft, book, new Map());
+  expect(partial.issues).toEqual([]);
+  await repository.saveDraft(partial.catalog, { replace: true });
+  const reopened = await repository.loadState();
+  expect(reopened.notices).toEqual([]);
+  expect(reopened.draft).toEqual(partial.catalog);
+  expect(reopened.catalog).toEqual(catalog);
+  expect(reopened.session).toEqual(session);
+  expect(decodeWorkbook(encodeWorkbook(reopened.draft)).photos.map(row => row.value)).toEqual(book.photos.map(row => row.value));
+  await expect(repository.publishDraft()).rejects.toThrow('INVALID_CATALOG');
+
+  const empty = previewImport(reopened.draft, decodeWorkbook(encodeWorkbook()), new Map());
+  await repository.saveDraft(empty.catalog, { replace: true });
+  expect(await repository.loadState()).toMatchObject({
+    notices: [], catalog, session, draft: { rooms: [], terms: [], photos: [], galleries: { whole_house: [] }, nextPhotoNumber: 1, sample: false },
+  });
 });

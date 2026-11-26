@@ -1,6 +1,6 @@
 import { cloneCatalog, validateCatalog } from './catalog';
-import { type Catalog, type Labels, type Language, type Photo, type RoomDefinition, type Space, type Term, type TermKind } from './types';
-import { catalogSpaces, cleanLabels, hasRoom, nameKey, sameName, validLabels } from './rooms';
+import type { Catalog, Labels, Language, Photo, PhotoField, RoomDefinition, Space, Term } from './types';
+import { cleanLabels, hasRoom, nameKey, sameName, validLabels } from './rooms';
 import { filenameKey, normalizePhotoFilenames, validFilename } from './photo-filenames';
 import { AppError } from './errors';
 
@@ -17,6 +17,7 @@ export interface WorkbookPhoto {
 export interface WorkbookRow<T> { row: number; rows: Record<Language, number>; value: T }
 export interface TransferIssue { sheet: string; row: number; column?: string; labels: Labels }
 export interface CatalogWorkbook { photos: WorkbookRow<WorkbookPhoto>[]; issues: TransferIssue[] }
+const columns = { room: 'Room', style: 'Style', palette: 'Palette', material: 'Material', detail: 'Detail' } as const;
 export interface ImportPreview {
   base: string;
   catalog: Catalog;
@@ -36,14 +37,13 @@ export function previewImport(input: Catalog, workbook: CatalogWorkbook, images:
   const current = normalizePhotoFilenames(input);
   const issues = [...workbook.issues];
   const recorded = new Set(workbook.issues.map(issue => `${issue.sheet}:${issue.row}:${issue.column ?? ''}`));
-  const hasRecorded = (sheet: string, row: number, column: string) => recorded.has(`${sheet}:${row}:${column}`);
   const problem = (entry: WorkbookRow<WorkbookPhoto>, column: string, ru: string, tk: string, language: Language = 'ru') => {
     issues.push(transferIssue(language === 'ru' ? 'Russian' : 'Turkmen', entry.rows[language], ru, tk, column));
   };
   // Import is a complete draft replacement. The current draft is only used below
   // to find an image file for a workbook filename that staff have not reselected.
   const next: Catalog = {
-    ...cloneCatalog(current),
+    id: current.id, version: current.version, createdAt: current.createdAt,
     nextPhotoNumber: 1,
     rooms: [],
     terms: [],
@@ -53,7 +53,6 @@ export function previewImport(input: Catalog, workbook: CatalogWorkbook, images:
   };
   const rooms = new Map<string, RoomDefinition>();
   const terms = new Map<string, Term>();
-  const photos = new Map<string, Photo>();
   const occupied = new Set([...current.rooms, ...current.terms, ...current.photos].map(item => item.id));
   const nextIds = new Map<string, number>();
   function allocate(prefix: string) {
@@ -63,55 +62,56 @@ export function previewImport(input: Catalog, workbook: CatalogWorkbook, images:
     const id = `${prefix}-${index}`; occupied.add(id); return id;
   }
 
-  // A shared vocabulary record must have one consistent translation pair in a book.
-  const names = new Map<string, Set<string>>();
-  const incoming = new Map<string, Labels>();
+  const names = new Map<string, { id: string; labels: Labels }>();
+  let termCount = 0;
   let vocabularyLimitReported = false;
-  const key = (kind: string, language: Language, value: string) => `${kind}:${language}:${nameKey(value)}`;
-  function indexNames(kind: string, id: string, labels: Labels) {
-    for (const language of ['ru', 'tk'] as const) {
-      const labelKey = key(kind, language, labels[language]);
-      const ids = names.get(labelKey) ?? new Set<string>(); ids.add(id); names.set(labelKey, ids);
-    }
-  }
-  function resolve(kind: 'room' | TermKind, labels: Labels, entry: WorkbookRow<WorkbookPhoto>, column: string): string {
+  const key = (kind: PhotoField, language: Language, value: string) => `${kind}:${language}:${nameKey(value)}`;
+  function register(kind: PhotoField, labels: Labels, entry: WorkbookRow<WorkbookPhoto>) {
+    const column = columns[kind];
     const cleaned = cleanLabels(labels);
-    if (!validLabels(cleaned)) {
-      for (const language of ['ru', 'tk'] as const) if (!cleaned[language] || cleaned[language].length > 100) {
-        if (!hasRecorded(language === 'ru' ? 'Russian' : 'Turkmen', entry.rows[language], column)) {
-          problem(entry, column, 'Заполните название (1–100 символов) на обоих языках.', 'Ady iki dilde hem dolduryň (1–100 nyşan).', language);
+    if (!cleaned.ru && !cleaned.tk) return;
+    if (cleaned.ru.length > 100 || cleaned.tk.length > 100) {
+      for (const language of ['ru', 'tk'] as const) {
+        const cell = `${language === 'ru' ? 'Russian' : 'Turkmen'}:${entry.rows[language]}:${column}`;
+        if (cleaned[language].length > 100 && !recorded.has(cell)) {
+          problem(entry, column, 'Название должно содержать не более 100 символов.', 'At 100 nyşandan uzyn bolmaly däl.', language);
+          recorded.add(cell);
         }
       }
-      return '';
+      return;
     }
-    const matched = new Set<string>();
-    for (const language of ['ru', 'tk'] as const) for (const id of names.get(key(kind, language, cleaned[language])) ?? []) matched.add(id);
-    if (matched.size > 1) {
-      problem(entry, column, 'Названия на двух языках относятся к разным записям. Проверьте перевод.', 'Iki dildäki atlar dürli ýazgylara degişli. Terjimäni barlaň.');
-      return '';
-    }
-    let id = matched.values().next().value as string | undefined;
-    if (!id) {
-      if (kind !== 'room' && terms.size >= TRANSFER_LIMITS.terms) {
-        if (!vocabularyLimitReported) {
-          problem(entry, column, 'Превышен лимит: не более 5 000 названий.', 'Çäkden geçildi: 5 000-den köp at bolmaly däl.');
-          vocabularyLimitReported = true;
-        }
-        return '';
+    const existing = names.get(key(kind, 'ru', cleaned.ru)) ?? names.get(key(kind, 'tk', cleaned.tk));
+    if (existing) {
+      if ((cleaned.ru && nameKey(existing.labels.ru) !== nameKey(cleaned.ru)) ||
+          (cleaned.tk && nameKey(existing.labels.tk) !== nameKey(cleaned.tk))) {
+        problem(entry, column, 'Используйте одинаковый перевод этого названия во всех строках.', 'Bu adyň terjimesini ähli setirlerde birmeňzeş ulanyň.');
       }
-      id = allocate(`excel-${kind}`);
+      return;
     }
-    const previous = incoming.get(`${kind}:${id}`);
-    if (previous && (nameKey(previous.ru) !== nameKey(cleaned.ru) || nameKey(previous.tk) !== nameKey(cleaned.tk))) {
-      problem(entry, column, 'Используйте одинаковый перевод этого названия во всех строках.', 'Bu adyň terjimesini ähli setirlerde birmeňzeş ulanyň.');
-      return '';
+    if (kind !== 'room' && termCount >= TRANSFER_LIMITS.terms) {
+      if (!vocabularyLimitReported) {
+        problem(entry, column, 'Превышен лимит: не более 5 000 названий.', 'Çäkden geçildi: 5 000-den köp at bolmaly däl.');
+        vocabularyLimitReported = true;
+      }
+      return;
     }
-    incoming.set(`${kind}:${id}`, cleaned);
-    indexNames(kind, id, cleaned);
-    if (kind === 'room') {
-      rooms.set(id, { id, labels: cleaned }); next.galleries[id] ??= [];
-    } else terms.set(id, { id, kind, labels: cleaned });
-    return id;
+    const record = { id: allocate(`excel-${kind}`), labels: cleaned };
+    if (kind !== 'room') termCount++;
+    if (cleaned.ru) names.set(key(kind, 'ru', cleaned.ru), record);
+    if (cleaned.tk) names.set(key(kind, 'tk', cleaned.tk), record);
+  }
+
+  // A later bilingual row can establish that two earlier, one-language names
+  // refer to one room or term. Only names explicitly paired in this book do so.
+  for (const bilingual of [true, false]) {
+    for (const entry of workbook.photos) {
+      for (const kind of ['room', 'style', 'palette', 'material', 'detail'] as const) {
+        const value = entry.value[kind];
+        for (const labels of Array.isArray(value) ? value : [value]) {
+          if (Boolean(labels.ru.trim() && labels.tk.trim()) === bilingual) register(kind, labels, entry);
+        }
+      }
+    }
   }
 
   const aliases = new Map<string, Photo>();
@@ -120,7 +120,6 @@ export function previewImport(input: Catalog, workbook: CatalogWorkbook, images:
   });
   const seenNames = new Set<string>();
   const seenPhotos = new Set<string>();
-  const incomingPhotos: Photo[] = [];
   for (const entry of workbook.photos) {
     const row = entry.value;
     if (!validFilename(row.filename)) {
@@ -128,28 +127,37 @@ export function previewImport(input: Catalog, workbook: CatalogWorkbook, images:
       continue;
     }
     const name = filenameKey(row.filename);
-    const old = aliases.get(name);
+    const selectedImage = images.get(name);
+    const old = selectedImage ? undefined : aliases.get(name);
     if (seenNames.has(name) || (old && seenPhotos.has(old.id))) {
       problem(entry, 'Image filename', 'Фотография повторяется. Оставьте одну строку на каждом листе.', 'Surat gaýtalanýar. Her sahypada bir setir galdyryň.');
       continue;
     }
     seenNames.add(name);
     if (old) seenPhotos.add(old.id);
-    const room = resolve('room', row.room, entry, 'Room');
-    const styleId = resolve('style', row.style, entry, 'Style');
-    function tags(kind: 'palette' | 'material' | 'detail', column: string) {
-      const list = row[kind];
-      if (!list.length && !hasRecorded('Russian', entry.rows.ru, column) && !hasRecorded('Turkmen', entry.rows.tk, column)) {
-        problem(entry, column, 'Заполните обязательное поле на обоих языках.', 'Hökmany meýdany iki dilde hem dolduryň.');
-      }
-      const ids = list.map(labels => resolve(kind, labels, entry, column)).filter(Boolean);
-      if (new Set(ids).size !== ids.length) problem(entry, column, 'Название повторяется в этой ячейке.', 'Bu öýjükde at gaýtalanýar.');
+    const blankTranslations: NonNullable<Photo['blankTranslations']> = {};
+    function assignment(kind: PhotoField, labels: Labels): string {
+      const record = names.get(key(kind, 'ru', labels.ru)) ?? names.get(key(kind, 'tk', labels.tk));
+      if (!record) return '';
+      if (!labels.ru.trim()) blankTranslations[kind] = 'ru';
+      if (!labels.tk.trim()) blankTranslations[kind] = 'tk';
+      if (kind === 'room') {
+        rooms.set(record.id, record);
+        next.galleries[record.id] ??= [];
+      } else if (!terms.has(record.id)) terms.set(record.id, { ...record, kind });
+      return record.id;
+    }
+    const room = assignment('room', row.room);
+    const styleId = assignment('style', row.style);
+    function tags(kind: 'palette' | 'material' | 'detail') {
+      const ids = row[kind].map(labels => assignment(kind, labels)).filter(Boolean);
+      if (new Set(ids).size !== ids.length) problem(entry, columns[kind], 'Название повторяется в этой ячейке.', 'Bu öýjükde at gaýtalanýar.');
       return ids;
     }
-    const paletteIds = tags('palette', 'Palette');
-    const materialIds = tags('material', 'Material');
-    const detailIds = tags('detail', 'Detail');
-    const source = images.get(name) ?? old;
+    const paletteIds = tags('palette');
+    const materialIds = tags('material');
+    const detailIds = tags('detail');
+    const source = selectedImage ?? old;
     if (!source) {
       problem(entry, 'Image filename', `Выберите файл: ${row.filename}`, `Faýly saýlaň: ${row.filename}`);
       continue;
@@ -159,23 +167,16 @@ export function previewImport(input: Catalog, workbook: CatalogWorkbook, images:
       id, room, styleId, paletteIds, materialIds, detailIds,
       image: source.image, width: source.width, height: source.height, sample: false,
       sourceFilename: row.filename,
+      ...(Object.keys(blankTranslations).length ? { blankTranslations } : {}),
     };
-    photos.set(id, photo); incomingPhotos.push(photo);
+    next.photos.push(photo);
+    if (room) next.galleries[room].push(id);
   }
-  next.rooms = [...rooms.values()]; next.terms = [...terms.values()]; next.photos = [...photos.values()];
+  next.rooms = [...rooms.values()]; next.terms = [...terms.values()];
   if (next.rooms.length > TRANSFER_LIMITS.terms || next.terms.length > TRANSFER_LIMITS.terms || next.photos.length > TRANSFER_LIMITS.photos) {
     issues.push(transferIssue('Russian', 0, 'Превышен лимит: 500 фотографий или 5 000 названий.', 'Çäkden geçildi: 500 surat ýa-da 5 000 at.'));
   }
 
-  // Room galleries follow Russian-sheet order. Whole House starts empty.
-  const spaces = catalogSpaces(next);
-  for (const space of spaces) next.galleries[space] ??= [];
-  for (const photo of incomingPhotos) {
-    if (photo.room) {
-      const gallery = next.galleries[photo.room];
-      if (gallery && !gallery.includes(photo.id)) gallery.push(photo.id);
-    }
-  }
   const added = next.rooms.length + next.terms.length + next.photos.length;
   const removed = current.rooms.length + current.terms.length + current.photos.length;
   const catalog = normalizePhotoFilenames(next, undefined, workbook.photos.map(entry => entry.value.filename));

@@ -7,6 +7,7 @@ export type Space = Room | 'whole_house';
 export const SPACES: Space[] = ['whole_house', ...ROOMS];
 export interface RoomDefinition { id: Room; labels: Labels }
 export type TermKind = 'style' | 'palette' | 'material' | 'detail';
+export type PhotoField = 'room' | TermKind;
 export interface Term { id: string; kind: TermKind; labels: Labels }
 export type ImageRef = { kind: 'bundled'; key: string } | { kind: 'local'; file: string; thumbnail: string };
 export interface Photo {
@@ -20,11 +21,14 @@ export interface Photo {
   paletteIds: string[];
   materialIds: string[];
   detailIds: string[];
+  /** A shared room or term may have a translation that was blank on this photo. */
+  blankTranslations?: Partial<Record<PhotoField, Language>>;
   image: ImageRef;
   width: number;
   height: number;
   sample: boolean;
 }
+export type PhotoAssignments = Pick<Photo, 'room' | 'styleId' | 'paletteIds' | 'materialIds' | 'detailIds'>;
 export interface Catalog {
   id: string;
   /** Next generated photo filename number; retained when photos are deleted. */

@@ -1,12 +1,13 @@
 import { useMemo, useState } from 'react';
 import { Text, View } from 'react-native';
-import { Chip, ErrorBanner, TextField, typography, spaceLabel, tx, useLayout } from '../../components/ui';
+import { Chip, ErrorBanner, TextField, typography, photoRoomLabel, spaceLabel, tx, useLayout } from '../../components/ui';
 import { PhotoTile } from '../../components/PhotoTile';
 import { IconButton } from '../../components/Icon';
 import { Disclosure } from '../../components/Disclosure';
 import { useApp } from '../../state/AppProvider';
 import { Space } from '../../domain/types';
 import { catalogSpaces } from '../../domain/rooms';
+import { photoFieldsForLanguage, photoTermSearchText } from '../../domain/photo-metadata';
 import { messageForError } from '../../domain/errors';
 import { StaffList, staffStyles as s } from '../../features/staff/shared';
 
@@ -19,14 +20,14 @@ export default function Galleries() {
   const [search, setSearch] = useState('');
   const [error, setError] = useState<string | null>(null);
   const t = (tk: string, ru: string) => tx(language, tk, ru);
+  const terms = useMemo(() => new Map(draft?.terms.map(term => [term.id, term])), [draft?.terms]);
   const photos = useMemo(() => {
     if (!draft) return [];
     const byId = new Map(draft.photos.map(photo => [photo.id, photo]));
     const list = selectedOnly ? draft.galleries[space].map(id => byId.get(id)!).filter(Boolean) : draft.photos.filter(photo => space === 'whole_house' || photo.room === space);
-    const terms = new Map(draft.terms.map(term => [term.id, `${term.labels.tk} ${term.labels.ru}`]));
     const query = search.trim().toLocaleLowerCase();
-    return list.filter(photo => !query || `${photo.id} ${spaceLabel(photo.room, language, draft.rooms)} ${terms.get(photo.styleId) ?? ''}`.toLocaleLowerCase().includes(query));
-  }, [draft, space, selectedOnly, search, language]);
+    return list.filter(photo => !query || `${photo.id} ${photoRoomLabel(photo, language, draft.rooms)} ${photoTermSearchText(photo, terms, 'style')}`.toLocaleLowerCase().includes(query));
+  }, [draft, space, selectedOnly, search, language, terms]);
   if (!draft) return null;
   const deck = draft.galleries[space];
   async function update(ids: string[]) {
@@ -49,10 +50,11 @@ export default function Galleries() {
       {error && <ErrorBanner message={error} />}
     </View>} ListEmptyComponent={<Text style={typography.body}>{t('Suratlar tapylmady. Surat goşuň ýa-da süzgüçleri üýtgediň.', 'Фото не найдены. Добавьте фотографии или измените фильтры.')}</Text>} renderItem={({ item }) => {
       const position = deck.indexOf(item.id);
-      const style = draft.terms.find(term => term.id === item.styleId);
+      const roomName = photoRoomLabel(item, language, draft.rooms);
+      const styleName = terms.get(photoFieldsForLanguage(item, language).styleId)?.labels[language] || t('Tegler gerek', 'Нужны теги');
       return <View style={{ width: (contentWidth - (columns - 1) * 12) / columns, marginBottom: 12, gap: 4 }}>
-        <PhotoTile photo={item} language={language} title={spaceLabel(item.room, language, draft.rooms)} subtitle={style?.labels[language] ?? t('Tegler gerek', 'Нужны теги')} selected={position >= 0} badge={position >= 0 ? String(position + 1) : undefined}
-          label={(position >= 0 ? t('Suraty aýyrmak', 'Убрать фото') : t('Surat goşmak', 'Добавить фото')) + ': ' + spaceLabel(item.room, language, draft.rooms) + ', ' + (style?.labels[language] ?? t('Tegler gerek', 'Нужны теги')) + (position >= 0 ? ', ' + t('orun', 'позиция') + ' ' + (position + 1) : '')}
+        <PhotoTile photo={item} language={language} title={roomName} subtitle={styleName} selected={position >= 0} badge={position >= 0 ? String(position + 1) : undefined}
+          label={(position >= 0 ? t('Suraty aýyrmak', 'Убрать фото') : t('Surat goşmak', 'Добавить фото')) + ': ' + roomName + ', ' + styleName + (position >= 0 ? ', ' + t('orun', 'позиция') + ' ' + (position + 1) : '')}
           disabled={busy} onPress={() => void update(position >= 0 ? deck.filter(id => id !== item.id) : [...deck, item.id])} />
         {selectedOnly ? <View style={[s.row, { justifyContent: 'center' }]}><IconButton icon="up" label={t('Suraty öňe süýşürmek', 'Переместить фото раньше')} fallbackLabel={t('Öňe', 'Раньше')} disabled={busy || position <= 0} onPress={() => move(item.id, -1)} /><IconButton icon="down" label={t('Suraty yza süýşürmek', 'Переместить фото позже')} fallbackLabel={t('Yza', 'Позже')} disabled={busy || position === deck.length - 1} onPress={() => move(item.id, 1)} /></View> : null}
       </View>;

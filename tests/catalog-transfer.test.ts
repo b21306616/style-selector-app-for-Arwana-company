@@ -53,6 +53,8 @@ test('the empty template contains headers only with column widths and filters an
   const preview = previewImport(seedCatalog, decoded, new Map());
   expect(preview.issues).toEqual([]);
   expect(preview.catalog).toMatchObject({ rooms: [], terms: [], photos: [], galleries: { whole_house: [] }, sample: false });
+  for (const name of book.SheetNames) XLSX.utils.sheet_add_aoa(book.Sheets[name], [[' ', '', '\t', '  ']], { origin: 'A20' });
+  expect(previewImport(seedCatalog, decodeWorkbook(bytes(book)), new Map())).toEqual(preview);
 });
 
 test('a workbook and its images restore all bilingual descriptions into room galleries', () => {
@@ -100,24 +102,64 @@ test('Unicode-normalized filenames pair between sheets and selected image files'
   expect(previewImport(empty(), workbook, images).issues).toEqual([]);
 });
 
-test.each(['Russian', 'Turkmen'])('%s requires all six values in every nonblank photo row', sheet => {
+test.each(['Russian', 'Turkmen'])('%s requires the filename and permits each descriptive cell to be blank', sheet => {
   for (const [index, column] of WORKBOOK_HEADERS.entries()) {
     const workbook = decodeWorkbook(editWorkbook(book => { book.Sheets[sheet][XLSX.utils.encode_cell({ r: 1, c: index })] = { t: 's', v: '' }; }, onePhoto()));
-    expect(workbook.issues).toContainEqual(expect.objectContaining({ sheet, row: 2, column }));
+    if (column === 'Image filename') expect(workbook.issues).toContainEqual(expect.objectContaining({ sheet, row: 2, column }));
+    else expect(previewImport(seedCatalog, workbook, new Map()).issues).toEqual([]);
   }
 });
 
-test('incomplete drafts export with blank values for completion in Excel', () => {
+test('reimporting an incomplete draft clears the previous assignments', () => {
   const catalog = onePhoto();
   catalog.photos[0].styleId = '';
   catalog.photos[0].paletteIds = [];
   const book = XLSX.read(encodeWorkbook(catalog), { type: 'array' });
   expect(book.Sheets.Russian.C2.v).toBe('');
   expect(book.Sheets.Turkmen.D2.v).toBe('');
-  expect(decodeWorkbook(encodeWorkbook(catalog)).issues).toEqual(expect.arrayContaining([
-    expect.objectContaining({ sheet: 'Russian', row: 2, column: 'Style' }),
-    expect.objectContaining({ sheet: 'Turkmen', row: 2, column: 'Palette' }),
-  ]));
+  const preview = previewImport(seedCatalog, decodeWorkbook(encodeWorkbook(catalog)), new Map());
+  expect(preview.issues).toEqual([]);
+  expect(preview.catalog.photos).toHaveLength(1);
+  expect(preview.catalog.photos[0]).toMatchObject({ styleId: '', paletteIds: [], image: catalog.photos[0].image });
+  expect(preview.catalog.terms.some(term => term.kind === 'style' || term.kind === 'palette')).toBe(false);
+});
+
+test('partial sheets preserve each photo’s blanks even when a later row connects the shared translations', () => {
+  const current = normalizePhotoFilenames(seedCatalog);
+  const [first, second, third, last] = current.photos.map(photo => photo.exportFilename!);
+  const workbook = decodeWorkbook(editWorkbook(book => {
+    book.Sheets.Russian = XLSX.utils.aoa_to_sheet([WORKBOOK_HEADERS.slice(),
+      [first, 'Кабинет', 'Модерн', 'Песок; Шёлк'],
+      [second], [third, 'Кабинет', 'Модерн', 'Песок; Шёлк', 'Дуб; Камень'], [last],
+    ]);
+    book.Sheets.Turkmen = XLSX.utils.aoa_to_sheet([WORKBOOK_HEADERS.slice(),
+      [last], [third, 'Otag', 'Döwrebap', 'Çäge; Ýüpek', 'Dub; Daş'],
+      [second, 'Otag', 'Döwrebap'], [first, '', '', '', 'Dub; Daş'],
+    ]);
+  }));
+  const result = previewImport(current, workbook, new Map());
+  expect(result.issues).toEqual([]);
+  const { catalog } = result;
+  expect(catalog.photos.map(photo => photo.exportFilename)).toEqual([first, second, third, last]);
+  expect(catalog.rooms.map(room => room.labels)).toEqual([{ ru: 'Кабинет', tk: 'Otag' }]);
+  expect(catalog.terms).toHaveLength(5);
+  const [a, b, c, filenameOnly] = catalog.photos;
+  expect([a.styleId, b.styleId]).toEqual([c.styleId, c.styleId]);
+  expect(a.paletteIds).toEqual(c.paletteIds);
+  expect(a.materialIds).toHaveLength(2);
+  expect(a.materialIds).toEqual(c.materialIds);
+  expect(a.blankTranslations).toEqual({ room: 'tk', style: 'tk', palette: 'tk', material: 'ru' });
+  expect(b.blankTranslations).toEqual({ room: 'ru', style: 'ru' });
+  expect(c.blankTranslations).toBeUndefined();
+  expect(filenameOnly).toMatchObject({ room: '', styleId: '', paletteIds: [], materialIds: [], detailIds: [] });
+  expect(catalog.galleries).toEqual({ whole_house: [], [a.room]: [a.id, b.id, c.id] });
+  const exported = XLSX.read(encodeWorkbook(catalog), { type: 'array' });
+  expect(exported.Sheets.Russian.E2.v).toBe('');
+  expect(exported.Sheets.Turkmen.E2.v).toBe('Dub; Daş');
+  const reread = decodeWorkbook(encodeWorkbook(catalog));
+  expect(reread.issues).toEqual([]);
+  expect(reread.photos.map(row => row.value)).toEqual(workbook.photos.map(row => row.value));
+  expect(previewImport(catalog, reread, new Map()).issues).toEqual([]);
 });
 
 test('multiple labels preserve order and quote embedded semicolons and quotation marks', () => {
@@ -158,6 +200,14 @@ test('rejects formulas, Excel errors, invalid filenames, and overlong labels at 
     expect.objectContaining({ sheet: 'Russian', row: 3, column: 'Image filename' }),
     expect.objectContaining({ sheet: 'Turkmen', row: 3, column: 'Room' }),
   ]));
+});
+
+test('an uncached formula in an otherwise empty template blocks clearing the draft', () => {
+  const book = XLSX.read(encodeWorkbook(), { type: 'array' });
+  book.Sheets.Turkmen['!ref'] = 'A1:F2';
+  book.Sheets.Turkmen.C2 = { t: 'n', f: '1+1', v: '' };
+  const review = previewImport(seedCatalog, decodeWorkbook(bytes(book)), new Map());
+  expect(review.issues).toContainEqual(expect.objectContaining({ sheet: 'Turkmen', row: 2, column: 'Style' }));
 });
 
 test('rejects duplicate filenames and missing translation rows', () => {

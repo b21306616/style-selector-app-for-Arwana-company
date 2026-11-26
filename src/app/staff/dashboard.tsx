@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { router } from 'expo-router';
 import { FlatList, Pressable, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Button, colors, ErrorBanner, Header, Screen, tx, typography, spaceLabel, useLayout } from '../../components/ui';
+import { Button, colors, ErrorBanner, Header, Screen, tx, typography, photoRoomLabel, spaceLabel, useLayout } from '../../components/ui';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
 import { PhotoTile } from '../../components/PhotoTile';
 import { PhotoImage } from '../../components/PhotoImage';
@@ -14,6 +14,7 @@ import { useStaffWorkspace } from '../../features/staff/workspace-context';
 import { staffStyles as s } from '../../features/staff/shared';
 import { Space, type Photo } from '../../domain/types';
 import { catalogSpaces } from '../../domain/rooms';
+import { photoFieldsForLanguage } from '../../domain/photo-metadata';
 import { messageForError } from '../../domain/errors';
 
 export default function StaffDashboard() {
@@ -42,6 +43,12 @@ export default function StaffDashboard() {
 
   if (!draft || !catalog) return null;
 
+  function photoCaption(photo: Photo) {
+    const room = photoRoomLabel(photo, language, activeSource?.rooms ?? []);
+    const style = termsMap.get(photoFieldsForLanguage(photo, language).styleId);
+    return { room, style, title: style ? `${room} · ${style}` : room };
+  }
+  const viewingTitle = viewingPhoto ? photoCaption(viewingPhoto).title : '';
   const overviewRooms = [...draft.rooms, ...catalog.rooms.filter(room => !draft.rooms.some(item => item.id === room.id))];
   const overviewSpaces = catalogSpaces({ rooms: overviewRooms });
   const links = [
@@ -115,19 +122,20 @@ export default function StaffDashboard() {
           columnWrapperStyle={columns > 1 ? { gap: 12 } : undefined}
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: 24, gap: 12 }}
-          renderItem={({ item, index }) => (
-            <View style={{ width: (contentWidth - (columns - 1) * 12) / columns }}>
+          renderItem={({ item, index }) => {
+            const caption = photoCaption(item);
+            return <View style={{ width: (contentWidth - (columns - 1) * 12) / columns }}>
               <PhotoTile
                 photo={item}
                 language={language}
-                title={spaceLabel(item.room, language, activeSource?.rooms ?? [])}
-                subtitle={termsMap.get(item.styleId) ?? t('Tegler ýok', 'Без тегов')}
+                title={caption.room}
+                subtitle={caption.style || t('Tegler ýok', 'Без тегов')}
                 badge={String(index + 1)}
-                label={`${spaceLabel(item.room, language, activeSource?.rooms ?? [])}, ${termsMap.get(item.styleId) ?? ''}, ${index + 1}`}
+                label={`${caption.room}, ${caption.style ?? ''}, ${index + 1}`}
                 onPress={() => setViewingPhoto(item)}
               />
-            </View>
-          )}
+            </View>;
+          }}
           ListEmptyComponent={
             <View style={styles.emptyContainer}>
               <Text style={[typography.body, { textAlign: 'center' }]}>
@@ -143,7 +151,7 @@ export default function StaffDashboard() {
       <SafeAreaView style={styles.viewer}>
         <View style={styles.viewerHeader}>
           <Text style={styles.viewerTitle}>
-            {viewingPhoto ? `${spaceLabel(viewingPhoto.room, language, activeSource?.rooms ?? [])}${termsMap.get(viewingPhoto.styleId) ? ' · ' + termsMap.get(viewingPhoto.styleId) : ''}` : ''}
+            {viewingTitle}
           </Text>
           <IconButton
             label={tx(language, 'Ýapmak', 'Закрыть')}
@@ -159,7 +167,7 @@ export default function StaffDashboard() {
             language={language}
             fit="contain"
             style={styles.fullImage}
-            label={`${spaceLabel(viewingPhoto.room, language, activeSource?.rooms ?? [])}, ${termsMap.get(viewingPhoto.styleId) ?? ''}`}
+            label={viewingTitle}
           />
         )}
       </SafeAreaView>

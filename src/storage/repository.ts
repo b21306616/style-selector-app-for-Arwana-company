@@ -5,7 +5,7 @@ import { normalizePhotoFilenames } from '../domain/photo-filenames';
 import { AppError } from '../domain/errors';
 import { isValidSession } from '../domain/session';
 import { type Catalog, type Language, type Session } from '../domain/types';
-import { catalogSpaces, normalizeCatalog, validLabels, validRoomId } from '../domain/rooms';
+import { catalogSpaces, normalizeCatalog, validDraftLabels, validRoomId } from '../domain/rooms';
 import { assertCatalogImages } from './images';
 
 const DATABASE_VERSION = 1;
@@ -88,7 +88,7 @@ function parseDraftRecord(payload: string | undefined): ParsedCatalog {
   const raw = JSON.parse(payload ?? 'null');
   const value = normalizeCatalog(raw) as Catalog;
   // Incomplete editorial metadata is allowed in drafts. Malformed structures are not.
-  if (!value || !Array.isArray(value.rooms) || value.rooms.some(room => !room || !validRoomId(room.id) || !validLabels(room.labels)) || new Set(value.rooms.map(room => room.id)).size !== value.rooms.length || !Array.isArray(value.photos) || !Array.isArray(value.terms) ||
+  if (!value || !Array.isArray(value.rooms) || value.rooms.some(room => !room || !validRoomId(room.id) || !validDraftLabels(room.labels)) || new Set(value.rooms.map(room => room.id)).size !== value.rooms.length || !Array.isArray(value.photos) || !Array.isArray(value.terms) ||
     !value.galleries || catalogSpaces(value).some((space) => !Array.isArray(value.galleries[space])) ||
     value.terms.some((term) => !term || typeof term.id !== 'string' || !term.labels || typeof term.labels.tk !== 'string' || typeof term.labels.ru !== 'string') ||
     value.photos.some((photo) => !photo || typeof photo.id !== 'string' || !photo.image || !Array.isArray(photo.paletteIds) || !Array.isArray(photo.materialIds) || !Array.isArray(photo.detailIds))) {
@@ -207,9 +207,8 @@ export function saveDraft(draft: Catalog, options?: { replace?: boolean }): Prom
   return serialized(async () => {
     const db = await database();
     // Draft content can be incomplete; publication performs the strict validation.
-    const row = await db.getFirstAsync<{ payload: string }>('SELECT payload FROM catalog_draft WHERE singleton = 1');
-    const previous = options?.replace ? undefined : row ? parseDraft(row.payload) : undefined;
-    const saved = normalizePhotoFilenames(draft, previous);
+    const row = options?.replace ? undefined : await db.getFirstAsync<{ payload: string }>('SELECT payload FROM catalog_draft WHERE singleton = 1');
+    const saved = normalizePhotoFilenames(draft, row ? parseDraft(row.payload) : undefined);
     await db.runAsync('INSERT OR REPLACE INTO catalog_draft (singleton, payload) VALUES (1, ?)', JSON.stringify(saved));
   });
 }

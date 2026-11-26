@@ -1,5 +1,5 @@
 import { type Catalog, type Language, type RoomDefinition, type TermKind } from './types';
-import { catalogSpaces, cleanLabels, nameKey, sameName, validLabels, validRoomId } from './rooms';
+import { catalogSpaces, cleanLabels, nameKey, sameName, validDraftLabels, validLabels, validRoomId } from './rooms';
 import { AppError } from './errors';
 
 export interface ValidationIssue {
@@ -28,12 +28,14 @@ export function validateCatalog(input: unknown): ValidationIssue[] {
   const roomNames = new Set<string>();
   let duplicateRoomName = false;
   for (const room of catalog.rooms) {
-    if (!room || typeof room.id !== 'string' || !validRoomId(room.id) || !validLabels(room.labels) || roomIds.has(room.id)) {
+    if (!room || typeof room.id !== 'string' || !validRoomId(room.id) || !validDraftLabels(room.labels) || roomIds.has(room.id)) {
       add('ROOM_DEFINITION', 'rooms', 'Otaglaryň ID-lerini we iki dilde atlaryny barlaň.', 'Проверьте идентификаторы и названия комнат на двух языках.');
       return issues;
     }
     roomIds.add(room.id);
+    if (!validLabels(room.labels)) add('ROOM_LABEL', room.id, 'Otagyň adyny türkmençe we rusça dolduryň.', 'Укажите название комнаты на русском и туркменском.');
     for (const language of ['ru', 'tk'] as const) {
+      if (!room.labels[language].trim()) continue;
       const key = `${language}:${nameKey(room.labels[language])}`;
       if (roomNames.has(key)) duplicateRoomName = true;
       roomNames.add(key);
@@ -67,6 +69,9 @@ export function validateCatalog(input: unknown): ValidationIssue[] {
     photoIds.add(photo.id);
     photoRooms.set(photo.id, photo.room);
     if (!roomIds.has(photo.room)) add('ROOM', photo.id, 'Otagy saýlaň.', 'Выберите комнату.');
+    if (selectedIds.has(photo.id) && photo.blankTranslations && Object.keys(photo.blankTranslations).length) {
+      add('PHOTO_TRANSLATION', photo.id, 'Bu suratyň ýetmeýän terjimelerini dolduryň.', 'Заполните недостающие переводы для этой фотографии.');
+    }
     if (selectedIds.has(photo.id) && terms.get(photo.styleId) !== 'style') add('STYLE', photo.id, 'Bar bolan stili saýlaň.', 'Выберите существующий стиль.');
     for (const [field, kind] of [['paletteIds', 'palette'], ['materialIds', 'material'], ['detailIds', 'detail']] as const) {
       const tags = photo[field];

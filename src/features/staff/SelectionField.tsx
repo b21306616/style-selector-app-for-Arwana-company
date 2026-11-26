@@ -3,7 +3,7 @@ import { FlatList, KeyboardAvoidingView, Pressable, ScrollView, StyleSheet, Text
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppModal } from '../../components/AppModal';
 import { Icon, IconButton } from '../../components/Icon';
-import { Button, TextField, colors, tx, typography, useLayout } from '../../components/ui';
+import { Button, TextField, colors, optionLabel, tx, typography, useLayout } from '../../components/ui';
 import type { Labels, Language } from '../../domain/types';
 
 export type SelectionOption = { id: string; labels: Labels; usageCount?: number };
@@ -36,7 +36,7 @@ export function SelectionField(props: SelectionProps) {
   const [open, setOpen] = useState(false);
   const trigger = useRef<ComponentRef<typeof View>>(null);
   const names = useMemo(() => {
-    const labels = new Map(options.map(option => [option.id, option.labels[language]]));
+    const labels = new Map(options.map(option => [option.id, optionLabel(option.labels, language)]));
     return selectedIds.map(id => labels.get(id)).filter((name): name is string => !!name);
   }, [options, selectedIds, language]);
   const summary = names.length ? names.slice(0, 2).join(', ') : tx(language, 'Saýlaň', 'Выберите');
@@ -112,7 +112,7 @@ function SelectionList({ label, language, options, selectedIds, onChange, onClos
   if (mode === 'confirm') return <ScrollView contentContainerStyle={styles.editor} keyboardShouldPersistTaps="handled">
     <Text accessibilityRole="header" style={typography.subheading}>{t(`Saýlanan ýazgylary öçürmelimi (${deleteIds.length})?`, `Удалить выбранные записи (${deleteIds.length})?`)}</Text>
     <Text style={typography.small}>{t('Olar garalamadan aýrylar. Ulanylýan ýazgylar öçürilmez.', 'Они будут удалены из черновика. Используемые записи защищены от удаления.')}</Text>
-    {options.filter(option => marked.has(option.id)).map(option => <Text key={option.id} style={styles.optionText}>{option.labels[language]}</Text>)}
+    {options.filter(option => marked.has(option.id)).map(option => <Text key={option.id} style={styles.optionText}>{optionLabel(option.labels, language)}</Text>)}
     {feedback}
     <Button title={t(`Öçürmek (${deleteIds.length})`, `Удалить (${deleteIds.length})`)} variant="danger" disabled={disabled} onPress={() => void remove()} />
     <Button title={t('Ýatyrmak', 'Отмена')} variant="ghost" disabled={disabled} onPress={() => setMode('delete')} />
@@ -139,7 +139,7 @@ function SelectionList({ label, language, options, selectedIds, onChange, onClos
       </View>
       {mode === 'delete' && <Text style={typography.small}>{t('Ulanylýan ýazgylary öçürmek üçin ilki suratlarda çalyşyň.', 'Используемые записи сначала замените у связанных фотографий.')}</Text>}
       </View>}
-      renderItem={({ item }) => <SelectionRow label={item.labels[language]} checked={mode === 'delete' ? marked.has(item.id) : selected.has(item.id)} multiple={mode === 'delete' || multiple} disabled={disabled || (mode === 'delete' && !!item.usageCount)}
+      renderItem={({ item }) => <SelectionRow label={optionLabel(item.labels, language)} checked={mode === 'delete' ? marked.has(item.id) : selected.has(item.id)} multiple={mode === 'delete' || multiple} disabled={disabled || (mode === 'delete' && !!item.usageCount)}
         description={mode === 'delete' && item.usageCount ? t(`Suratlarda ulanylýar: ${item.usageCount}`, `Используется в фото: ${item.usageCount}`) : undefined}
         onPress={() => {
           if (mode === 'delete') { setDeleteIds(current => current.includes(item.id) ? current.filter(id => id !== item.id) : [...current, item.id]); return; }

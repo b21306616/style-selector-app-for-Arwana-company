@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors, typography, useLayout } from '../ui/theme';
 import { IconButton } from './Icon';
 export { colors, typography, useLayout } from '../ui/theme';
-export { tx, spaceLabel, photoCount, errorText } from '../ui/copy';
+export { tx, spaceLabel, photoRoomLabel, optionLabel, photoCount, errorText } from '../ui/copy';
 
 export function Screen({ children, scroll = true, style }: { children: ReactNode; scroll?: boolean; style?: StyleProp<ViewStyle> }) {
   const { padding } = useLayout();

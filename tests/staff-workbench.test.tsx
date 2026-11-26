@@ -1,7 +1,7 @@
 import { beforeEach, expect, jest, test } from '@jest/globals';
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
 import { useLayoutEffect } from 'react';
-import { StyleSheet, Text, useWindowDimensions } from 'react-native';
+import { Platform, StyleSheet, Text, useWindowDimensions } from 'react-native';
 import { DashboardWorkbench } from '../src/features/staff/DashboardWorkbench';
 import { StaffWorkspaceProvider, useStaffWorkspace } from '../src/features/staff/workspace-context';
 import { useApp, type AppContextValue } from '../src/state/AppProvider';
@@ -253,13 +253,18 @@ test('export shares workbook and photo ZIP from one snapshot and can share them 
   expect(screen.getByText(/сохраните книгу Excel и ZIP с фотографиями/)).toBeOnTheScreen();
 });
 
-test('Excel guidance explains clearing cells and replacing images and draft data', async () => {
+test('a ready review shows the workbook and photo count before confirming draft replacement', async () => {
   await render(<StaffWorkspaceProvider><Probe /></StaffWorkspaceProvider>);
   expect(screen.getByText(/Russian и Turkmen.*Пустая ячейка очищает поле/)).toBeOnTheScreen();
   expect(screen.getByText('Image filename · Room · Style · Palette · Material · Detail')).toBeOnTheScreen();
   await fireEvent.press(screen.getByRole('button', { name: 'Импорт из Excel' }));
-  expect(screen.getByText(/выберите новый файл с тем же именем/)).toBeOnTheScreen();
-  expect(screen.getByText(/Книга полностью заменит черновик/)).toBeOnTheScreen();
+  const card = within(screen.getByTestId('import-review'));
+  expect(card.getByText('catalog.xlsx')).toBeOnTheScreen();
+  expect(card.getByText('В черновике будет 48 фото.')).toBeOnTheScreen();
+  expect(card.queryByText(/Записей сейчас|После импорта|Подготовлено фотографий|Ванная/)).toBeNull();
+  await fireEvent.press(card.getByRole('button', { name: 'Сохранить импорт в черновик' }));
+  expect(screen.getByText('Заменить весь черновик?')).toBeOnTheScreen();
+  expect(app.saveDraft).not.toHaveBeenCalled();
 });
 
 test.each([
@@ -271,6 +276,8 @@ test.each([
   jest.mocked(pickWorkbook).mockResolvedValue({ name: 'template.xlsx', workbook: decodeWorkbook(encodeWorkbook()) });
   await render(<StaffWorkspaceProvider><Probe /></StaffWorkspaceProvider>);
   await fireEvent.press(screen.getByRole('button', { name: pick }));
+  expect(screen.getByText(language === 'ru' ? 'В книге нет фото. Импорт очистит весь черновик.' : 'Kitapda surat ýok. Import tutuş garalamany arassalar.')).toBeOnTheScreen();
+  expect(within(screen.getByTestId('import-review')).queryByRole('button', { name: /ZIP/ })).toBeNull();
   await fireEvent.press(screen.getByRole('button', { name: save }));
   expect(screen.getByText(title)).toBeOnTheScreen();
   await fireEvent.press(screen.getByRole('button', { name: cancel }));
@@ -278,7 +285,8 @@ test.each([
   expect(app.saveDraft).not.toHaveBeenCalled();
   await fireEvent.press(screen.getByRole('button', { name: save }));
   await fireEvent.press(screen.getByRole('button', { name: confirm }));
-  expect(app.draft).toMatchObject({ photos: [], rooms: [], terms: [], galleries: { whole_house: [] } });
+  expect(app.draft).toMatchObject({ photos: [], rooms: [], terms: [] });
+  expect(app.draft!.galleries).toEqual({});
   expect(app.catalog).toEqual(before);
 });
 
@@ -289,10 +297,11 @@ test('a filename-only photo can be confirmed and saved without any previous room
   jest.mocked(pickWorkbook).mockResolvedValue({ name: 'partial.xlsx', workbook });
   await render(<StaffWorkspaceProvider><Probe /></StaffWorkspaceProvider>);
   await fireEvent.press(screen.getByRole('button', { name: 'Импорт из Excel' }));
-  expect(screen.getByText(/Черновик можно сохранить сейчас/)).toBeOnTheScreen();
+  expect(screen.getByText('Перед публикацией заполните недостающие данные.')).toBeOnTheScreen();
   await fireEvent.press(screen.getByRole('button', { name: 'Сохранить импорт в черновик' }));
   await fireEvent.press(screen.getByRole('button', { name: 'Заменить черновик' }));
-  expect(app.draft).toMatchObject({ photos: [{ room: '', styleId: '', paletteIds: [], materialIds: [], detailIds: [] }], rooms: [], terms: [], galleries: { whole_house: [] } });
+  expect(app.draft).toMatchObject({ photos: [{ room: '', styleId: '', paletteIds: [], materialIds: [], detailIds: [] }], rooms: [], terms: [] });
+  expect(app.draft!.galleries).toEqual({});
 });
 
 test('unsupported workbook guidance directs staff to download the new template without opening import review', async () => {
@@ -315,7 +324,7 @@ test('blocked import review does not display misleading pre-publish tag warnings
   await act(async () => { await controller.chooseWorkbook(); });
   expect(controller.review!.issues.length).toBeGreaterThan(0);
   expect(controller.review!.warnings).toBeGreaterThan(0);
-  expect(screen.queryByText(/Черновик можно сохранить сейчас/)).toBeNull();
+  expect(screen.queryByText('Перед публикацией заполните недостающие данные.')).toBeNull();
   expect(screen.getByRole('button', { name: 'Сохранить импорт в черновик' })).toBeDisabled();
   expect(app.saveDraft).not.toHaveBeenCalled();
 });
@@ -328,30 +337,90 @@ test('Turkmen export copy explains which vocabulary transfers with photos', asyn
   expect(screen.getByText(/suratlarda ulanylýan otaglar we tegler/)).toBeOnTheScreen();
 });
 
-test('import review can display a newly created room before it exists in the draft', async () => {
+test('selecting a missing image enables import and the workbook creates its named room', async () => {
   const workbook = decodeWorkbook(encodeWorkbook(seedCatalog));
   workbook.photos = [{ ...workbook.photos[0], value: { ...workbook.photos[0].value, filename: 'office.jpg', room: { ru: 'Кабинет', tk: 'Iş otagy' } } }];
   jest.mocked(pickWorkbook).mockResolvedValue({ name: 'office.xlsx', workbook });
   jest.mocked(pickImportImages).mockResolvedValue(new Map([['office.jpg', staged]]));
   await render(<StaffWorkspaceProvider><Probe /></StaffWorkspaceProvider>);
   await act(async () => { await controller.chooseWorkbook(); });
-  await act(async () => { await controller.chooseImages(); });
+  expect(screen.getByText(/Russian · строка 2 · Image filename.*office\.jpg/s)).toBeOnTheScreen();
+  expect(screen.queryByText(/Импорт очистит весь черновик/)).toBeNull();
+  expect(screen.getByRole('button', { name: 'Сохранить импорт в черновик' })).toBeDisabled();
+  await fireEvent.press(screen.getByRole('button', { name: 'Выбрать ZIP или фотографии' }));
   const room = controller.review!.catalog.rooms.find(item => item.labels.ru === 'Кабинет')!;
   expect(app.draft!.galleries[room.id]).toBeUndefined();
   expect(controller.review!.issues).toEqual([]);
-  expect(screen.getByText('Кабинет')).toBeOnTheScreen();
-  expect(screen.getByText('0 → 1')).toBeOnTheScreen();
-  expect(screen.getByRole('button', { name: 'Сохранить импорт в черновик' })).toBeEnabled();
+  expect(screen.getByText('В черновике будет 1 фото.')).toBeOnTheScreen();
+  await fireEvent.press(screen.getByRole('button', { name: 'Сохранить импорт в черновик' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Заменить черновик' }));
+  expect(app.draft!.rooms).toEqual([room]);
+  expect(app.draft!.galleries).toEqual({ [room.id]: [app.draft!.photos[0].id] });
 });
 
-test('Turkmen direct-entry and Excel controls remain present on a narrow screen', async () => {
-  app.language = 'tk';
+test.each([
+  ['ru', 'android'], ['ru', 'ios'], ['tk', 'android'], ['tk', 'ios'],
+] as const)('the %s review on %s narrow layout with large text handles ready, missing-image, and incomplete imports', async (language, os) => {
+  app.language = language;
+  const ru = language === 'ru';
+  const platform = jest.replaceProperty(Platform, 'OS', os);
   const dimensions = jest.spyOn(require('react-native'), 'useWindowDimensions').mockReturnValue({ width: 320, height: 568, scale: 1, fontScale: 2 } satisfies ReturnType<typeof useWindowDimensions>);
   try {
     await render(<StaffWorkspaceProvider><Probe /></StaffWorkspaceProvider>);
-    expect(screen.getByRole('button', { name: 'Excel-den import' })).toBeOnTheScreen();
-    expect(screen.getByRole('button', { name: 'Excel-e eksport' })).toBeOnTheScreen();
-    expect(screen.getByRole('button', { name: 'Suraty garalama ýazdyrmak' })).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole('button', { name: ru ? 'Импорт из Excel' : 'Excel-den import' }));
+    let card = within(screen.getByTestId('import-review'));
+    expect(card.getByText('catalog.xlsx')).toBeOnTheScreen();
+    expect(card.getByText(ru ? 'В черновике будет 48 фото.' : 'Garalamada 48 surat bolar.')).toBeOnTheScreen();
+    expect(card.getByRole('button', { name: ru ? 'Сохранить импорт в черновик' : 'Importy garalama ýazdyrmak' })).toBeEnabled();
+
+    const missingBook = decodeWorkbook(encodeWorkbook(seedCatalog));
+    missingBook.photos = [{ ...missingBook.photos[0], value: { ...missingBook.photos[0].value, filename: 'missing.jpg', style: { ru: '', tk: '' } } }];
+    jest.mocked(pickWorkbook).mockResolvedValueOnce({ name: 'missing.xlsx', workbook: missingBook });
+    jest.mocked(pickImportImages).mockResolvedValueOnce(new Map([['missing.jpg', staged]]));
+    await fireEvent.press(screen.getByRole('button', { name: ru ? 'Импорт из Excel' : 'Excel-den import' }));
+    card = within(screen.getByTestId('import-review'));
+    expect(card.getByText(/missing\.jpg/)).toBeOnTheScreen();
+    expect(card.getByRole('button', { name: ru ? 'Сохранить импорт в черновик' : 'Importy garalama ýazdyrmak' })).toBeDisabled();
+    await fireEvent.press(card.getByRole('button', { name: ru ? 'Выбрать ZIP или фотографии' : 'ZIP ýa-da suratlary saýlamak' }));
+    expect(card.getByText(ru ? 'В черновике будет 1 фото.' : 'Garalamada 1 surat bolar.')).toBeOnTheScreen();
+    expect(card.getByText(ru ? 'Перед публикацией заполните недостающие данные.' : 'Çap etmezden ozal ýetmeýän maglumatlary dolduryň.')).toBeOnTheScreen();
+    expect(card.getByRole('button', { name: ru ? 'Сохранить импорт в черновик' : 'Importy garalama ýazdyrmak' })).toBeEnabled();
+  } finally {
+    platform.restore();
+    dimensions.mockRestore();
+  }
+});
+
+test.each(['ru', 'tk'] as const)('the %s review offers additional errors on demand on a narrow screen with large text', async language => {
+  app.language = language;
+  const ru = language === 'ru';
+  const workbook = decodeWorkbook(encodeWorkbook(seedCatalog));
+  workbook.photos = workbook.photos.slice(0, 27).map((entry, index) => ({ ...entry, value: { ...entry.value, filename: `required-${index + 1}.jpg` } }));
+  jest.mocked(pickWorkbook).mockResolvedValue({ name: 'catalog.xlsx', workbook });
+  const dimensions = jest.spyOn(require('react-native'), 'useWindowDimensions').mockReturnValue({ width: 320, height: 568, scale: 1, fontScale: 2 } satisfies ReturnType<typeof useWindowDimensions>);
+  try {
+    await render(<StaffWorkspaceProvider><Probe /></StaffWorkspaceProvider>);
+    await fireEvent.press(screen.getByRole('button', { name: ru ? 'Импорт из Excel' : 'Excel-den import' }));
+    let card = within(screen.getByTestId('import-review'));
+    expect(card.getByText(/required-1\.jpg/)).toBeOnTheScreen();
+    expect(card.queryByText(/required-2\.jpg/)).toBeNull();
+    let more = card.getByRole('button', { name: ru ? 'Остальные ошибки (26)' : 'Beýleki ýalňyşlyklar (26)' });
+    await fireEvent.press(more);
+    expect(card.getByText(/required-26\.jpg/)).toBeOnTheScreen();
+    expect(card.queryByText(/required-27\.jpg/)).toBeNull();
+    await fireEvent.press(card.getByRole('button', { name: ru ? 'Следующие ошибки' : 'Indiki ýalňyşlyklar' }));
+    expect(card.getByText(/required-27\.jpg/)).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole('button', { name: ru ? 'Импорт из Excel' : 'Excel-den import' }));
+    card = within(screen.getByTestId('import-review'));
+    expect(card.queryByText(/required-27\.jpg/)).toBeNull();
+    more = card.getByRole('button', { name: ru ? 'Остальные ошибки (26)' : 'Beýleki ýalňyşlyklar (26)' });
+    await fireEvent.press(more);
+    expect(card.getByText(/required-2\.jpg/)).toBeOnTheScreen();
+    await fireEvent.press(more);
+    expect(card.queryByText(/required-2\.jpg/)).toBeNull();
+    await fireEvent.press(card.getByRole('button', { name: ru ? 'Отменить импорт' : 'Importy ýatyrmak' }));
+    expect(screen.queryByTestId('import-review')).toBeNull();
+    expect(app.saveDraft).not.toHaveBeenCalled();
   } finally { dimensions.mockRestore(); }
 });
 
@@ -482,11 +551,10 @@ test('style selection stays open, replaces the previous style, and toggles off',
 
 test('empty rooms remain manageable and external draft changes clear unavailable form choices', async () => {
   const view = await render(<StaffWorkspaceProvider><Probe /></StaffWorkspaceProvider>);
-  await act(async () => { controller.setFields({ ...controller.fields, room: 'kitchen', styleId: 'minimalist' }); controller.setSpaces(['kitchen', 'whole_house']); });
-  app.draft = { ...app.draft!, rooms: [], terms: [], photos: [], galleries: { whole_house: [] } };
+  await act(async () => { controller.setFields({ ...controller.fields, room: 'kitchen', styleId: 'minimalist' }); });
+  app.draft = { ...app.draft!, rooms: [], terms: [], photos: [], galleries: {} };
   await view.rerender(<StaffWorkspaceProvider><Probe /></StaffWorkspaceProvider>);
   expect(controller.fields).toMatchObject({ room: '', styleId: '' });
-  expect(controller.spaces).toEqual(['whole_house']);
   await fireEvent.press(screen.getByRole('button', { name: 'Комната' }));
   expect(screen.getByText('Пока нет вариантов. Добавьте новый.')).toBeOnTheScreen();
   expect(screen.getByRole('button', { name: '＋ Добавить: Комната' })).toBeEnabled();

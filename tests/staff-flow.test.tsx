@@ -30,7 +30,7 @@ beforeEach(() => {
   jest.mocked(useApp).mockImplementation(() => app);
 });
 
-test('changing a photo room removes it from its former room gallery while preserving Whole House', async () => {
+test('changing a photo room removes it from its former gallery and keeps it in the library', async () => {
   await render(<Photos />);
   await fireEvent.press(screen.getAllByRole('button', { name: 'Wanna otagy, Skandinaw' })[0]);
   const roomButtons = screen.getAllByRole('button', { name: 'Aşhana' });
@@ -40,7 +40,7 @@ test('changing a photo room removes it from its former room gallery while preser
   const id = 'bathroom-scandinavian-1';
   expect(saved.photos.find(photo => photo.id === id)?.room).toBe('kitchen');
   expect(saved.galleries.bathroom).not.toContain(id);
-  expect(saved.galleries.whole_house).toContain(id);
+  expect(saved.galleries.kitchen).toEqual(app.draft!.galleries.kitchen);
 });
 
 test('staff can give a roomless imported photo its first room and fill only the chosen translation', async () => {
@@ -95,35 +95,73 @@ test('staff publication reports success only after the save resolves', async () 
 });
 
 test('gallery search retains the full selection when moving a filtered photo', async () => {
-  const before = [...app.draft!.galleries.whole_house];
+  const before = [...app.draft!.galleries.bathroom];
   const id = before[1];
   await render(<Galleries />);
   await fireEvent.press(screen.getByRole('button', { name: 'Görkeziliş tertibi' }));
   await fireEvent.changeText(screen.getByLabelText('Otag ýa-da stil boýunça gözleg'), id);
   await fireEvent.press(screen.getByRole('button', { name: 'Suraty öňe süýşürmek' }));
   const saved = jest.mocked(app.saveDraft).mock.calls[0][0] as Catalog;
-  expect(saved.galleries.whole_house).toEqual([before[1], before[0], ...before.slice(2)]);
-  expect(saved.galleries.bathroom).toEqual(app.draft!.galleries.bathroom);
+  expect(saved.galleries.bathroom).toEqual([before[1], before[0], ...before.slice(2)]);
+  expect(saved.galleries.kitchen).toEqual(app.draft!.galleries.kitchen);
 });
 
 test('photo tiles expose selection state and only remove the chosen gallery entry', async () => {
-  const before = [...app.draft!.galleries.whole_house];
+  const before = [...app.draft!.galleries.bathroom];
   await render(<Galleries />);
   const tile = screen.getByRole('button', { name: 'Suraty aýyrmak: Wanna otagy, Skandinaw, orun 1' });
   expect(tile).toBeSelected();
   await fireEvent.press(tile);
   const saved = jest.mocked(app.saveDraft).mock.calls[0][0] as Catalog;
-  expect(saved.galleries.whole_house).toEqual(before.slice(1));
-  expect(saved.galleries.bathroom).toEqual(app.draft!.galleries.bathroom);
+  expect(saved.galleries.bathroom).toEqual(before.slice(1));
+  expect(saved.galleries.kitchen).toEqual(app.draft!.galleries.kitchen);
   expect(saved.photos).toEqual(app.draft!.photos);
+});
+
+test('the gallery editor follows the selected room and handles removal of the final room', async () => {
+  const view = await render(<Galleries />);
+  await fireEvent.press(screen.getByRole('button', { name: 'Aşhana' }));
+  expect(screen.getByRole('button', { name: /Suraty aýyrmak: Aşhana, Skandinaw, orun 1$/ })).toBeOnTheScreen();
+  expect(screen.queryByRole('button', { name: /Suraty aýyrmak: Wanna otagy/ })).toBeNull();
+  app.draft = { ...app.draft!, rooms: [], photos: [], galleries: {} };
+  await view.rerender(<Galleries />);
+  expect(screen.getByText('Ilki garalama formasynda otag goşuň.')).toBeOnTheScreen();
 });
 
 test('publication coverage is optional while publication remains available', async () => {
   await render(<Preview />);
-  expect(screen.queryByText('Skandinaw · 8')).not.toBeOnTheScreen();
+  expect(screen.queryByText('Skandinaw · 3')).not.toBeOnTheScreen();
   const coverage = screen.getAllByRole('button', { name: 'Toplumyň düzümi' })[0];
   expect(coverage).toHaveProp('accessibilityState', { expanded: false });
   await fireEvent.press(coverage);
-  expect(screen.getByText('Skandinaw · 8')).toBeOnTheScreen();
+  expect(screen.getByText('Skandinaw · 3')).toBeOnTheScreen();
   expect(screen.getByRole('button', { name: 'Bu toplumlary çap etmek' })).toBeEnabled();
+});
+
+test('staff photos preserves Все комнаты search across rooms and roomless imports, and empty catalogs remain publishable', async () => {
+  app.language = 'ru';
+  const roomless = { ...app.draft!.photos[0], id: 'roomless-photo', room: '', styleId: '' };
+  app.draft!.photos = [roomless, ...app.draft!.photos];
+  const photos = await render(<Photos />);
+  expect(screen.getByRole('button', { name: 'Все комнаты' })).toBeSelected();
+  expect(screen.getByRole('button', { name: 'Не выбрано, Нужны теги' })).toBeOnTheScreen();
+  await fireEvent.changeText(screen.getByLabelText('Поиск фотографий'), 'Гостиная');
+  expect(screen.getAllByRole('button', { name: /^Гостиная,/ })).toHaveLength(8);
+  expect(screen.queryByRole('button', { name: /^Ванная,/ })).toBeNull();
+  expect(screen.queryByRole('button', { name: 'Не выбрано, Нужны теги' })).toBeNull();
+  await fireEvent.changeText(screen.getByLabelText('Поиск фотографий'), '');
+  await fireEvent.press(screen.getByRole('button', { name: 'Кухня' }));
+  expect(screen.queryByRole('button', { name: 'Не выбрано, Нужны теги' })).toBeNull();
+  await fireEvent.press(screen.getByRole('button', { name: 'Все комнаты' }));
+  expect(screen.getByRole('button', { name: 'Не выбрано, Нужны теги' })).toBeOnTheScreen();
+
+  app.draft = { ...app.draft!, rooms: [], photos: [roomless], galleries: {} };
+  await photos.rerender(<Photos />);
+  expect(screen.getByText('Сначала добавьте комнату в форме черновика.')).toBeOnTheScreen();
+  expect(screen.getByRole('button', { name: '＋ Добавить фотографии' })).toBeDisabled();
+  await photos.unmount();
+
+  app.draft = { ...app.draft!, rooms: [], photos: [], galleries: {} };
+  await render(<Preview />);
+  expect(screen.getByRole('button', { name: 'Опубликовать подборки' })).toBeEnabled();
 });

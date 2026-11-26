@@ -29,20 +29,20 @@ beforeEach(() => {
   jest.mocked(useApp).mockImplementation(() => app);
 });
 
-test('staff dashboard displays simplified summary buttons for all 5 spaces without preview strips', async () => {
+test('staff dashboard shows counts for the four sample rooms', async () => {
   await render(<Dashboard />);
   expect(screen.getByText('Обзор подборок')).toBeOnTheScreen();
-  expect(screen.getByText('Весь дом')).toBeOnTheScreen();
+  expect(screen.queryByText('Весь дом')).toBeNull();
   expect(screen.getByText('Кухня')).toBeOnTheScreen();
   expect(screen.getByText('Гостиная')).toBeOnTheScreen();
   expect(screen.getByText('Спальня')).toBeOnTheScreen();
   expect(screen.getByText('Ванная')).toBeOnTheScreen();
 
   const publishedButtons = screen.getAllByRole('button', { name: /Опубликовано: \d+/ });
-  expect(publishedButtons).toHaveLength(5);
+  expect(publishedButtons).toHaveLength(4);
 
   const draftButtons = screen.getAllByRole('button', { name: /Черновик: \d+/ });
-  expect(draftButtons).toHaveLength(5);
+  expect(draftButtons).toHaveLength(4);
 });
 
 test('clicking published summary button opens slide modal with published photos and close works', async () => {
@@ -82,11 +82,22 @@ test('staff dashboard renders Turkmen labels and single-line space overview corr
   expect(screen.getByText('Myhman otagy')).toBeOnTheScreen();
   expect(screen.getByText('Ýatylýan otag')).toBeOnTheScreen();
   expect(screen.getByText('Wanna otagy')).toBeOnTheScreen();
-  expect(screen.getByText('Bütin jaý')).toBeOnTheScreen();
+  expect(screen.queryByText('Bütin jaý')).toBeNull();
 
   const publishedButtons = screen.getAllByRole('button', { name: /Çap edilen: \d+/ });
-  expect(publishedButtons).toHaveLength(5);
+  expect(publishedButtons).toHaveLength(4);
 
   const draftButtons = screen.getAllByRole('button', { name: /Garalama: \d+/ });
-  expect(draftButtons).toHaveLength(5);
+  expect(draftButtons).toHaveLength(4);
+});
+
+test.each(['ru', 'tk'] as const)('staff dashboard handles empty %s catalog and draft room lists', async language => {
+  app.language = language;
+  const ru = language === 'ru';
+  app.catalog = { ...app.catalog!, rooms: [], photos: [], galleries: {}, sample: false };
+  app.draft = { ...app.draft!, rooms: [], photos: [], galleries: {}, sample: false };
+  await render(<Dashboard />);
+  expect(screen.getByText(ru ? 'Пока нет комнат.' : 'Entäk otag ýok.')).toBeOnTheScreen();
+  expect(screen.getByRole('button', { name: ru ? 'Подборки · 0' : 'Toplumlar · 0' })).toBeOnTheScreen();
+  expect(screen.queryAllByRole('button', { name: ru ? /Опубликовано: \d+/ : /Çap edilen: \d+/ })).toHaveLength(0);
 });

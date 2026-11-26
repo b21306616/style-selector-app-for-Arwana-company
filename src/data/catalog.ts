@@ -30,7 +30,6 @@ const photos: Photo[] = ROOMS.flatMap((room) => [1, 2, 3].flatMap((variant) => s
   };
 })));
 
-/** Stable, interleaved order makes the demo repeatable without duplicate photographs. */
 export const seedCatalog: Catalog = {
   id: 'sample-v1', version: 1, createdAt: '2026-11-17T00:00:00.000Z', sample: true,
   terms: seedTerms,
@@ -41,6 +40,5 @@ export const seedCatalog: Catalog = {
     bedroom: photos.filter((photo) => photo.room === 'bedroom').map((photo) => photo.id),
     living_room: photos.filter((photo) => photo.room === 'living_room').map((photo) => photo.id),
     kitchen: photos.filter((photo) => photo.room === 'kitchen').map((photo) => photo.id),
-    whole_house: [1, 2].flatMap((variant) => styles.flatMap((style) => ROOMS.map((room) => `${room}-${style}-${variant}`))),
   },
 };

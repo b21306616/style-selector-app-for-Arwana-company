@@ -28,7 +28,7 @@ test('metadata-only preview uses the exact original fingerprint and never mutate
   expect(JSON.stringify(draft)).toBe(before);
   expect(previewImport(draft, workbook, new Map())).toEqual(first);
   expect(first.issues).toEqual([]);
-  expect(first.added).toBe(first.catalog.rooms.length + first.catalog.terms.length + first.catalog.photos.length);
+  expect(first.catalog.photos).toHaveLength(1);
 });
 
 test('one-language corrections update shared labels without changing omitted photo references', () => {
@@ -40,7 +40,7 @@ test('one-language corrections update shared labels without changing omitted pho
   expect(result.catalog.terms.find(term => term.labels.ru === incoming.value.style.ru)?.labels.tk).toBe('Täzelenen terjime');
   expect(result.catalog.photos).toHaveLength(1);
   expect(result.catalog.photos[0].styleId).toBe('excel-style-1');
-  expect(result.removed).toBeGreaterThan(0);
+  expect(result.catalog.rooms).toHaveLength(1);
 });
 
 test('inconsistent repeated translations block import', () => {
@@ -62,7 +62,7 @@ test('PNG and JPEG imports sharing a stem keep distinct identities and reimport 
   expect(new Set(imported.catalog.photos.map(photo => photo.exportFilename)).size).toBe(2);
   const original = previewImport(imported.catalog, book(png, jpg), new Map());
   expect(original.issues).toEqual([]);
-  expect(original.added).toBe(original.catalog.rooms.length + original.catalog.terms.length + original.catalog.photos.length);
+  expect(original.catalog.photos.map(photo => photo.image)).toEqual(imported.catalog.photos.map(photo => photo.image));
   const canonical = { ...png, value: { ...png.value, filename: 'living-2.jpg' } };
   expect(previewImport(imported.catalog, book(canonical), new Map()).issues).toEqual([]);
   const duplicate = previewImport(imported.catalog, book(png, canonical), new Map());
@@ -84,11 +84,11 @@ test('missing image errors have stable candidates and replacement builds only ro
   expect(result.issues).toEqual([]);
   expect(result.catalog.photos).toHaveLength(1);
   expect(result.catalog.rooms).toHaveLength(1);
-  expect(result.catalog.galleries.whole_house).toEqual([]);
+  expect(Object.keys(result.catalog.galleries)).toEqual([result.catalog.rooms[0].id]);
   expect(result.catalog.galleries[result.catalog.photos[0].room]).toEqual([result.catalog.photos[0].id]);
 });
 
-test('moving an existing library-only photo preserves its omission from galleries', () => {
+test('importing a library-only photo assigns it to the room named in the workbook', () => {
   const draft = current();
   const photo = draft.photos[0];
   for (const key of Object.keys(draft.galleries)) draft.galleries[key] = draft.galleries[key].filter(id => id !== photo.id);
@@ -97,7 +97,7 @@ test('moving an existing library-only photo preserves its omission from gallerie
   const result = previewImport(draft, book(incoming), new Map());
   expect(result.issues).toEqual([]);
   expect(result.catalog.galleries[result.catalog.photos[0].room]).toEqual([result.catalog.photos[0].id]);
-  expect(result.catalog.galleries.whole_house).toEqual([]);
+  expect(Object.keys(result.catalog.galleries)).toEqual([result.catalog.photos[0].room]);
 });
 
 test('new tags in one cell seed fresh vocabulary without duplicate-name errors', () => {

@@ -46,7 +46,6 @@ export default function Preview() {
         {needsAttention ? <Text style={typography.small}>{t('Üns berilmeli', 'Требует внимания')}</Text> : null}
         {photos.length === 0 ? <Text style={typography.small}>{t('Müşderilere elýeterli däl', 'Недоступна клиентам')}</Text> : <Disclosure title={t('Toplumyň düzümi', 'Состав подборки')}>
           <View style={s.row}>{[...counts].map(([id, count]) => <Chip key={id} label={(draft.terms.find(term => term.id === id)?.labels[language] ?? t('Stilsiz', 'Без стиля')) + ' · ' + count} />)}</View>
-          {space === 'whole_house' && <Text style={typography.small}>{draft.rooms.map(({ id: room }) => spaceLabel(room, language, draft.rooms) + ': ' + photos.filter(photo => photo.room === room).length).join(' · ')}</Text>}
           <Text style={typography.small}>{photos.length > 20 ? t('20 saýlawdan soň deslapky netije.', 'Предварительный результат после 20 оценок.') : t('Soňky suratdan soň netije.', 'Результат после последнего фото.')}</Text>
         </Disclosure>}
       </View>;

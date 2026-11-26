@@ -3,8 +3,6 @@ export type Labels = Record<Language, string>;
 export const ROOMS = ['bathroom', 'bedroom', 'living_room', 'kitchen'] as const;
 /** Room IDs are catalog data; ROOMS is only the legacy/seed list. */
 export type Room = string;
-export type Space = Room | 'whole_house';
-export const SPACES: Space[] = ['whole_house', ...ROOMS];
 export interface RoomDefinition { id: Room; labels: Labels }
 export type TermKind = 'style' | 'palette' | 'material' | 'detail';
 export type PhotoField = 'room' | TermKind;
@@ -38,7 +36,7 @@ export interface Catalog {
   rooms: RoomDefinition[];
   terms: Term[];
   photos: Photo[];
-  galleries: Record<Space, string[]>;
+  galleries: Record<Room, string[]>;
   sample: boolean;
 }
 export type Choice = 'like' | 'dislike';
@@ -46,7 +44,7 @@ export interface Rating { photoId: string; choice: Choice }
 export interface Session {
   id: string;
   catalog: Catalog;
-  space: Space;
+  space: Room;
   ratings: Rating[];
   status: 'active' | 'complete';
   createdAt: string;

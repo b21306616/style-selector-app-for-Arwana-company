@@ -12,8 +12,9 @@ test('a bilingual room gets an empty gallery and stable photo references', () =>
   const draft = addDraftRoom(seedCatalog, office);
   expect(draft.galleries.office).toEqual([]);
   expect(spaceLabel('office', 'ru', draft.rooms)).toBe('Кабинет');
-  const saved = addDraftPhoto(draft, { ...seedCatalog.photos[0], id: 'office-photo', room: 'office' }, ['office', 'whole_house']);
-  expect(saved.galleries.office).toEqual(['office-photo']);
+  const saved = addDraftPhoto(draft, { ...seedCatalog.photos[0], id: 'office-photo', room: 'office' });
+  expect(saved.photos.at(-1)?.room).toBe('office');
+  expect(saved.galleries.office).toEqual([]);
   expect(validateCatalog(saved)).toEqual([]);
   expect(seedCatalog.rooms).toEqual(defaultRooms);
 });
@@ -56,10 +57,10 @@ test('unused built-in rooms can be removed, including the final room', () => {
   const draft = { ...cloneCatalog(seedCatalog), photos: [], galleries: Object.fromEntries(Object.keys(seedCatalog.galleries).map(id => [id, []])) };
   const empty = removeDraftOptions(draft, 'room', draft.rooms.map(room => room.id));
   expect(empty.rooms).toEqual([]);
-  expect(empty.galleries).toEqual({ whole_house: [] });
+  expect(empty.galleries).toEqual({});
   expect(validateCatalog(empty)).toEqual([]);
   expect(normalizeCatalog(empty)).toEqual(normalizePhotoFilenames(empty));
-  expect(() => addDraftPhoto(empty, seedCatalog.photos[0], [])).toThrow('ROOM_REQUIRED');
+  expect(() => addDraftPhoto(empty, seedCatalog.photos[0])).toThrow('ROOM_REQUIRED');
 });
 
 test('legacy payload normalization preserves IDs, while malformed new definitions are rejected', () => {

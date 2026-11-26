@@ -1,23 +1,43 @@
 import { useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
-import { Button, colors, spaceLabel, tx, typography, useLayout } from '../../components/ui';
+import { Button, colors, tx, typography, useLayout } from '../../components/ui';
 import { ConfirmDialog } from '../../components/ConfirmDialog';
-import { catalogSpaces } from '../../domain/rooms';
+import { Disclosure } from '../../components/Disclosure';
+import type { TransferIssue } from '../../domain/catalog-transfer';
+import type { Language } from '../../domain/types';
 import { useApp } from '../../state/AppProvider';
 import { DraftEntryCard } from './DraftEntryCard';
 import { WorkspaceFeedback } from './WorkspaceFeedback';
 import { staffStyles as s } from './shared';
 import { useStaffWorkspace } from './workspace-context';
 
+function IssueText({ issue, language }: { issue: TransferIssue; language: Language }) {
+  const location = [issue.sheet, issue.row ? `${tx(language, 'setir', 'строка')} ${issue.row}` : '', issue.column].filter(Boolean).join(' · ');
+  return <Text style={styles.issue}>{location}{'\n'}{issue.labels[language]}</Text>;
+}
+
+function AdditionalIssues({ issues, language }: { issues: TransferIssue[]; language: Language }) {
+  const [page, setPage] = useState(0);
+  const last = Math.ceil((issues.length - 1) / 25) - 1;
+  const current = Math.min(page, last);
+  const start = 1 + current * 25;
+  return <View style={styles.issueList}>
+    {issues.slice(start, start + 25).map((issue, index) => <IssueText key={start + index} issue={issue} language={language} />)}
+    {last > 0 && <>
+      <Button title={tx(language, 'Öňki ýalňyşlyklar', 'Предыдущие ошибки')} variant="ghost" disabled={current === 0} onPress={() => setPage(current - 1)} />
+      <Button title={tx(language, 'Indiki ýalňyşlyklar', 'Следующие ошибки')} variant="ghost" disabled={current === last} onPress={() => setPage(current + 1)} />
+    </>}
+  </View>;
+}
+
 export function DashboardWorkbench() {
   const { draft, language } = useApp();
   const w = useStaffWorkspace();
   const { fontScale } = useLayout();
-  const [issuePage, setIssuePage] = useState(0);
   const t = (tk: string, ru: string) => tx(language, tk, ru);
   if (!draft) return null;
-  const page = Math.min(issuePage, Math.max(0, Math.ceil((w.review?.issues.length ?? 0) / 25) - 1));
-  const emptyImport = w.review?.issues.length === 0 && w.review.catalog.photos.length === 0;
+  const review = w.review;
+  const emptyImport = review?.issues.length === 0 && review.catalog.photos.length === 0;
   return <>
     <View style={styles.transferCard}>
       <Text accessibilityRole="header" style={typography.subheading}>{t('Excel bilen işlemek', 'Работа с Excel')}</Text>
@@ -25,7 +45,7 @@ export function DashboardWorkbench() {
       <Text style={typography.small}>Image filename · Room · Style · Palette · Material · Detail</Text>
       <Text style={typography.small}>{t('Bir stil ýazyp bilersiňiz. Palitranyň, materialyň we detalyň atlaryny nokatly otur bilen aýryň. Iki sanaw hem doldurylsa, atlaryň sany we tertibi gabat gelmeli.', 'Можно указать один стиль. Названия палитр, материалов и деталей разделяйте точкой с запятой. Если заполнены оба списка, количество и порядок названий должны совпадать.')}</Text>
       <View style={[styles.actions, fontScale >= 1.5 && styles.stacked]}>
-        <Button title={t('Excel-den import', 'Импорт из Excel')} variant="secondary" onPress={() => { setIssuePage(0); void w.chooseWorkbook(); }} disabled={w.busy} style={styles.action} />
+        <Button title={t('Excel-den import', 'Импорт из Excel')} variant="secondary" onPress={() => void w.chooseWorkbook()} disabled={w.busy} style={styles.action} />
         <Button title={t('Excel-e eksport', 'Экспорт в Excel')} variant="secondary" onPress={() => void w.exportDraft()} disabled={w.busy} style={styles.action} />
         <Button title={t('Şablony almak', 'Скачать шаблон')} variant="ghost" onPress={() => void w.makeTemplate()} disabled={w.busy} style={styles.action} />
       </View>
@@ -41,30 +61,23 @@ export function DashboardWorkbench() {
       <WorkspaceFeedback area="transfer" />
     </View>
 
-    {w.book && w.review && <View style={s.card}>
+    {w.book && review && <View style={s.card} testID="import-review">
       <Text accessibilityRole="header" style={typography.subheading}>{t('Importy barlamak', 'Проверка импорта')}</Text>
       <Text style={typography.small}>{w.book.name}</Text>
-      {!emptyImport && <>
-        <Text style={typography.small}>{t('Täze suratlar üçin Excel-de görkezilen atlar bilen faýllary saýlaň. Ady gabat gelse, saklanan surat ulanylar. Ony çalyşmak üçin şol at bilen täze faýly saýlaň.', 'Для новых фото выберите файлы с именами из Excel. При совпадении имени используется сохранённое изображение. Для его замены выберите новый файл с тем же именем.')}</Text>
-        <Button title={t('ZIP ýa-da suratlary saýlamak', 'Выбрать ZIP или фотографии')} variant="secondary" onPress={() => void w.chooseImages()} disabled={w.busy} />
-        <Text style={typography.small}>{t('Taýýar suratlar', 'Подготовлено фотографий')}: {w.images.size}</Text>
+      {review.issues.length > 0 ? <View style={styles.issues} accessibilityLiveRegion="polite">
+        <IssueText issue={review.issues[0]} language={language} />
+        {review.issues.length > 1 && <Disclosure key={`${w.book.name}-${w.bookKey ?? 0}`} title={`${t('Beýleki ýalňyşlyklar', 'Остальные ошибки')} (${review.issues.length - 1})`}>
+          <AdditionalIssues issues={review.issues} language={language} />
+        </Disclosure>}
+      </View> : emptyImport ? <Text style={styles.warning} accessibilityRole="alert">
+        {t('Kitapda surat ýok. Import tutuş garalamany arassalar.', 'В книге нет фото. Импорт очистит весь черновик.')}
+      </Text> : <>
+        <Text style={typography.body}>{t(`Garalamada ${review.catalog.photos.length} surat bolar.`, `В черновике будет ${review.catalog.photos.length} фото.`)}</Text>
+        {review.warnings > 0 && <Text style={typography.small}>{t('Çap etmezden ozal ýetmeýän maglumatlary dolduryň.', 'Перед публикацией заполните недостающие данные.')}</Text>}
       </>}
-      <Text style={typography.small}>{t('Garalama tutuşlygyna kitapdaky maglumatlar bilen çalşylar. Otag toplumlary Russian sahypasynyň tertibinde dörediler, «Bütin jaý» boş bolar.', 'Книга полностью заменит черновик. Комнатные подборки будут собраны в порядке листа Russian. Подборка «Весь дом» будет пустой.')}</Text>
-      <View style={styles.stats}>
-        {[ [t('Häzirki ýazgylar', 'Записей сейчас'), w.review.removed], [t('Importdan soňky ýazgylar', 'Записей после импорта'), w.review.added] ].map(([label, count]) => <View style={styles.stat} key={label}><Text style={styles.statNumber}>{count}</Text><Text style={typography.small}>{label}</Text></View>)}
-      </View>
-      <Text style={typography.small}>{t('Netije', 'После импорта')}: {w.review.catalog.photos.length} {t('surat', 'фото')} · {w.review.catalog.terms.length} {t('termin', 'терминов')}</Text>
-      {catalogSpaces(w.review.catalog).map(space => <View key={space} style={styles.summaryRow}><Text style={[typography.small, { flex: 1 }]}>{spaceLabel(space, language, w.review!.catalog.rooms)}</Text><Text style={s.label}>{draft.galleries[space]?.length ?? 0} → {w.review!.catalog.galleries[space].length}</Text></View>)}
-      {w.review.issues.length === 0 && w.review.warnings > 0 && <Text style={typography.small}>{t('Garalamany häzir saklap bilersiňiz. Çap etmezden ozal ýetmeýän maglumatlary dolduryň.', 'Черновик можно сохранить сейчас. Перед публикацией заполните недостающие данные.')}</Text>}
-      {w.review.issues.length > 0 && <View style={styles.issues} accessibilityLiveRegion="polite">
-        <Text style={s.label}>{t('Düzetmeli meseleler', 'Исправьте ошибки')}: {w.review.issues.length}</Text>
-        {w.review.issues.slice(page * 25, (page + 1) * 25).map((issue, index) => <Text key={`${page}-${index}`} style={styles.issue}>{issue.sheet}{issue.row ? ` · ${t('setir', 'строка')} ${issue.row}` : ''}{issue.column ? ` · ${issue.column}` : ''}: {issue.labels[language]}</Text>)}
-        {w.review.issues.length > 25 && <View style={s.row}>
-          <Button title={t('Öňki ýalňyşlyklar', 'Предыдущие ошибки')} variant="ghost" disabled={page === 0} onPress={() => setIssuePage(page - 1)} />
-          <Button title={t('Indiki ýalňyşlyklar', 'Следующие ошибки')} variant="ghost" disabled={(page + 1) * 25 >= w.review.issues.length} onPress={() => setIssuePage(page + 1)} />
-        </View>}
-      </View>}
-      <Button title={t('Importy garalama ýazdyrmak', 'Сохранить импорт в черновик')} disabled={w.busy || !!w.review.issues.length} onPress={() => w.setConfirmReplace(true)} />
+      {w.book.workbook.photos.length > 0 && <Button title={t('ZIP ýa-da suratlary saýlamak', 'Выбрать ZIP или фотографии')} variant="secondary" onPress={() => void w.chooseImages()} disabled={w.busy} />}
+      <WorkspaceFeedback area="import" />
+      <Button title={t('Importy garalama ýazdyrmak', 'Сохранить импорт в черновик')} disabled={w.busy || review.issues.length > 0} onPress={() => w.setConfirmReplace(true)} />
       <Button title={t('Importy ýatyrmak', 'Отменить импорт')} variant="ghost" disabled={w.busy} onPress={w.discardImport} />
     </View>}
 
@@ -83,7 +96,6 @@ const styles = StyleSheet.create({
   transferCard: { backgroundColor: colors.greenSoft, borderRadius: 20, padding: 16, gap: 12 },
   actions: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 }, stacked: { flexDirection: 'column' }, action: { flexGrow: 1, minWidth: 160, maxWidth: '100%' },
   output: { padding: 14, backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 14, gap: 12 },
-  stats: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 }, stat: { padding: 12, borderRadius: 12, backgroundColor: colors.sand, flexGrow: 1, minWidth: 90 }, statNumber: { ...typography.heading, color: colors.green },
-  summaryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, justifyContent: 'space-between' },
+  warning: { ...typography.body, color: colors.danger }, issueList: { gap: 10 },
   issues: { gap: 10, padding: 12, borderRadius: 12, backgroundColor: colors.dangerSoft }, issue: { ...typography.small, color: colors.danger },
 });

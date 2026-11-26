@@ -1,8 +1,9 @@
 import { AppError } from './errors';
-import type { Catalog, Choice, Session, Space } from './types';
+import { hasRoom } from './rooms';
+import type { Catalog, Choice, Room, Session } from './types';
 
-export function createSession(catalog: Catalog, space: Space, id: string, createdAt = new Date().toISOString()): Session {
-  if (!catalog.galleries[space]?.length) throw new AppError('EMPTY_GALLERY');
+export function createSession(catalog: Catalog, space: Room, id: string, createdAt = new Date().toISOString()): Session {
+  if (!hasRoom(catalog, space) || !catalog.galleries[space]?.length) throw new AppError('EMPTY_GALLERY');
   return { id, catalog, space, ratings: [], status: 'active', createdAt };
 }
 
@@ -28,8 +29,9 @@ export function isValidSession(value: unknown, catalog: Catalog): value is Omit<
   if (!value || typeof value !== 'object') return false;
   const candidate = value as Omit<Session, 'catalog'>;
   if (typeof candidate.id !== 'string' || typeof candidate.createdAt !== 'string' || !Array.isArray(candidate.ratings)) return false;
+  if (typeof candidate.space !== 'string' || !Object.hasOwn(catalog.galleries, candidate.space)) return false;
   const deck = catalog.galleries[candidate.space];
-  if (!deck?.length || candidate.ratings.length > deck.length) return false;
+  if (!Array.isArray(deck) || !deck.length || candidate.ratings.length > deck.length) return false;
   if (candidate.status !== (candidate.ratings.length === deck.length ? 'complete' : 'active')) return false;
   return candidate.ratings.every((rating, index) => rating && rating.photoId === deck[index] && (rating.choice === 'like' || rating.choice === 'dislike'));
 }

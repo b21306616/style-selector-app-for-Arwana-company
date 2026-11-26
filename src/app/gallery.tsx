@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
 import { IconButton, UndoIconButton } from '../components/Icon';
 import { SwipePhoto } from '../components/SwipePhoto';
-import { Button, EmptyState, ErrorBanner, Header, Screen, colors, errorText, spaceLabel, tx, typography } from '../components/ui';
+import { Button, EmptyState, ErrorBanner, Header, Screen, colors, errorText, sessionLabel, spaceLabel, tx, typography } from '../components/ui';
 import type { Choice } from '../domain/types';
 import { useApp } from '../state/AppProvider';
 
@@ -58,7 +58,7 @@ export default function GalleryScreen() {
       {failure || app.error ? <View pointerEvents="box-none" style={styles.errorOverlay}><ErrorBanner message={failure ?? errorText(app.error, language)} /></View> : null}
       <View pointerEvents="box-none" style={styles.topOverlay}>
         <IconButton icon="back" label={back.label} onPress={back.onPress} style={styles.pill} />
-        <Text accessibilityRole="header" style={styles.room} numberOfLines={1}>{spaceLabel(session.space, language, session.catalog.rooms)}</Text>
+        <Text accessibilityRole="header" style={styles.room} numberOfLines={1}>{sessionLabel(session, language)}</Text>
       </View>
       <View pointerEvents="box-none" style={styles.bottomOverlay}>
         <View pointerEvents="box-none" style={styles.controlRow}>

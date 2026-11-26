@@ -24,7 +24,7 @@ Expo Go needs the development bundle and assets from Metro. This is different fr
 - Russian and Turkmen, with a remembered language preference.
 - Heart/cross rating controls and swipes, undo, resume after closing, preliminary results after 20 choices, an optional Details breakdown, and a full-image liked-photo viewer.
 - One retained client session. Starting a new client clears previous choices after confirmation.
-- A sample catalog with 48 distinct AI-generated interiors: 12 per room and 32 in Whole House. Full images and thumbnails total 14.09 MiB. Gallery sizes remain editable.
+- Four editable sample rooms with 12 distinct AI-generated interiors each. Full images and thumbnails total 14.09 MiB. Gallery sizes remain editable.
 - Staff photo imports, bilingual vocabulary editing, gallery selection/order, draft validation, atomic publication, and offline PIN recovery.
 
 Read the [Android/iOS preview walkthrough](docs/device-preview.md), [staff guide](docs/staff-guide.md), [architecture notes](docs/architecture.md), and [validation record](docs/validation.md). Generated-image prompts and provenance are recorded in [sample-images.md](docs/sample-images.md).
@@ -33,7 +33,7 @@ Read the [Android/iOS preview walkthrough](docs/device-preview.md), [staff guide
 
 SQLite stores the catalog, draft, language, and one client session. Published catalog revisions are immutable while in use. Imported images are copied into private document storage; the app never depends on a photo-picker URI remaining available. PIN and recovery verifiers use encrypted native SecureStore storage. No analytics, accounts, server, runtime AI, or synchronization is configured.
 
-Each showroom device owns its catalog. Uninstalling the app or clearing its data can remove locally imported content. This version does not transfer or export catalogs between devices.
+Each showroom device owns its catalog. Uninstalling the app or clearing its data can remove locally imported content. Staff can transfer a draft to another device with the Excel workbook and its photo ZIP.
 
 ## Project layout
 

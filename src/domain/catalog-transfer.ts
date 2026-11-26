@@ -1,5 +1,5 @@
-import { cloneCatalog, validateCatalog } from './catalog';
-import type { Catalog, Labels, Language, Photo, PhotoField, RoomDefinition, Space, Term } from './types';
+import { validateCatalog } from './catalog';
+import type { Catalog, Labels, Language, Photo, PhotoField, RoomDefinition, Term } from './types';
 import { cleanLabels, hasRoom, nameKey, sameName, validLabels } from './rooms';
 import { filenameKey, normalizePhotoFilenames, validFilename } from './photo-filenames';
 import { AppError } from './errors';
@@ -23,8 +23,6 @@ export interface ImportPreview {
   catalog: Catalog;
   issues: TransferIssue[];
   warnings: number;
-  added: number;
-  removed: number;
 }
 
 export const draftFingerprint = (catalog: Catalog) => JSON.stringify(catalog);
@@ -48,7 +46,7 @@ export function previewImport(input: Catalog, workbook: CatalogWorkbook, images:
     rooms: [],
     terms: [],
     photos: [],
-    galleries: { whole_house: [] },
+    galleries: {},
     sample: false,
   };
   const rooms = new Map<string, RoomDefinition>();
@@ -177,22 +175,17 @@ export function previewImport(input: Catalog, workbook: CatalogWorkbook, images:
     issues.push(transferIssue('Russian', 0, 'Превышен лимит: 500 фотографий или 5 000 названий.', 'Çäkden geçildi: 500 surat ýa-da 5 000 at.'));
   }
 
-  const added = next.rooms.length + next.terms.length + next.photos.length;
-  const removed = current.rooms.length + current.terms.length + current.photos.length;
   const catalog = normalizePhotoFilenames(next, undefined, workbook.photos.map(entry => entry.value.filename));
-  return { base: draftFingerprint(input), catalog, issues, warnings: validateCatalog(catalog).length, added, removed };
+  return { base: draftFingerprint(input), catalog, issues, warnings: validateCatalog(catalog).length };
 }
 
-export function addDraftPhoto(current: Catalog, photo: Photo, spaces: Space[]): Catalog {
+export function addDraftPhoto(current: Catalog, photo: Photo): Catalog {
   if (!hasRoom(current, photo.room)) throw new AppError('ROOM_REQUIRED');
   if (current.photos.some(item => item.id === photo.id)) throw new AppError('INVALID_CATALOG');
   const terms = new Map(current.terms.map(term => [term.id, term.kind]));
   if ((photo.styleId && terms.get(photo.styleId) !== 'style') ||
       photo.paletteIds.some(id => terms.get(id) !== 'palette') || photo.materialIds.some(id => terms.get(id) !== 'material') || photo.detailIds.some(id => terms.get(id) !== 'detail')) throw new AppError('INVALID_CATALOG');
-  const next = cloneCatalog(current);
-  next.photos.push(photo);
-  for (const space of new Set(spaces)) if (space === 'whole_house' || space === photo.room) next.galleries[space].push(photo.id);
-  return next;
+  return { ...current, photos: [...current.photos, photo] };
 }
 
 export function addDraftTerm(current: Catalog, term: Term): Catalog {

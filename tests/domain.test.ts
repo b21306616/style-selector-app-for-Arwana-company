@@ -5,29 +5,28 @@ import { messageForError } from '../src/domain/errors';
 import { summarizeSession } from '../src/domain/scoring';
 import { canShowResult, createSession, isValidSession, rateSession, undoSession } from '../src/domain/session';
 import { ROOMS, type Catalog, type Session } from '../src/domain/types';
+import { singleRoomCatalog } from './room-fixture';
 
 function ratedSession(ids: string[], likes: string[], catalog = seedCatalog): Session {
   return {
-    id: 'test-session', catalog, space: 'whole_house', createdAt: '2026-11-17T10:00:00Z', status: 'active',
+    id: 'test-session', catalog: { ...catalog, galleries: { ...catalog.galleries, bathroom: ids } }, space: 'bathroom', createdAt: '2026-11-17T10:00:00Z', status: 'complete',
     ratings: ids.map((photoId) => ({ photoId, choice: likes.includes(photoId) ? 'like' : 'dislike' })),
   };
 }
 
 describe('catalog integrity', () => {
-  test('sample contains 48 distinct photos with 12 per room and an intermixed 32-photo house', () => {
+  test('sample contains four independent galleries with 12 distinct photos per room', () => {
     expect(validateCatalog(seedCatalog)).toEqual([]);
     expect(seedCatalog.photos).toHaveLength(48);
     expect(new Set(seedCatalog.photos.map((photo) => photo.id)).size).toBe(48);
     for (const room of ROOMS) expect(seedCatalog.galleries[room]).toHaveLength(12);
-    expect(seedCatalog.galleries.whole_house).toHaveLength(32);
-    const firstFour = seedCatalog.galleries.whole_house.slice(0, 4).map((id) => seedCatalog.photos.find((photo) => photo.id === id)?.room);
-    expect(firstFour).toEqual([...ROOMS]);
+    expect(Object.keys(seedCatalog.galleries)).toEqual([...ROOMS]);
   });
 
   test('flexible and empty galleries are valid, duplicate and wrong-room entries are not', () => {
     const catalog = cloneCatalog(seedCatalog);
     catalog.galleries.bathroom = [];
-    catalog.galleries.whole_house = catalog.galleries.bedroom.slice(0, 3);
+    catalog.galleries.bedroom = catalog.galleries.bedroom.slice(0, 3);
     expect(validateCatalog(catalog)).toEqual([]);
     catalog.galleries.bathroom = [catalog.galleries.bedroom[0], catalog.galleries.bedroom[0]];
     expect(validateCatalog(catalog).map((issue) => issue.code)).toEqual(expect.arrayContaining(['DUPLICATE_GALLERY_PHOTO', 'GALLERY_ROOM']));
@@ -72,10 +71,11 @@ describe('session transitions', () => {
   });
 
   test('early results become available at 20 ratings and undo can reverse that boundary', () => {
-    let session = createSession(seedCatalog, 'whole_house', 'threshold');
-    for (const id of session.catalog.galleries.whole_house.slice(0, 19)) session = rateSession(session, 'like', id);
+    const catalog = singleRoomCatalog(21);
+    let session = createSession(catalog, 'bathroom', 'threshold');
+    for (const id of catalog.galleries.bathroom.slice(0, 19)) session = rateSession(session, 'like', id);
     expect(canShowResult(session)).toBe(false);
-    session = rateSession(session, 'dislike', session.catalog.galleries.whole_house[19]);
+    session = rateSession(session, 'dislike', catalog.galleries.bathroom[19]);
     expect(canShowResult(session)).toBe(true);
     expect(session.status).toBe('active');
     expect(canShowResult(undoSession(session))).toBe(false);
@@ -102,16 +102,17 @@ describe('session transitions', () => {
 
 describe('evidence-based style summaries', () => {
   test('zero, one, or two likes do not claim a style result', () => {
-    const ids = seedCatalog.galleries.whole_house.slice(0, 12);
+    const ids = seedCatalog.galleries.bathroom;
     for (const count of [0, 1, 2]) expect(summarizeSession(ratedSession(ids, ids.slice(0, count))).kind).toBe('inconclusive');
   });
 
   test('exposure normalization does not count unviewed photos as dislikes', () => {
-    const scandinavian = seedCatalog.photos.filter((photo) => photo.styleId === 'scandinavian').map((photo) => photo.id);
-    const industrial = seedCatalog.photos.filter((photo) => photo.styleId === 'industrial').map((photo) => photo.id);
+    const catalog = singleRoomCatalog(24);
+    const scandinavian = catalog.photos.filter((photo) => photo.styleId === 'scandinavian').map((photo) => photo.id);
+    const industrial = catalog.photos.filter((photo) => photo.styleId === 'industrial').map((photo) => photo.id);
     const reviewed = [...scandinavian.slice(0, 2), ...industrial.slice(0, 4)];
     const liked = [...scandinavian.slice(0, 2), ...industrial.slice(0, 3)];
-    const result = summarizeSession(ratedSession(reviewed, liked));
+    const result = summarizeSession(ratedSession(reviewed, liked, catalog));
     expect(result.kind).toBe('single');
     expect(result.styles).toEqual([{ styleId: 'scandinavian', likes: 2, reviewed: 2, score: 1 }]);
   });

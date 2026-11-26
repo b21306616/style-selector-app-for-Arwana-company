@@ -9,7 +9,7 @@ import { readZipIndex } from '../src/domain/zip';
 import type { Catalog, Photo } from '../src/domain/types';
 import { decodeWorkbook, encodeWorkbook, WORKBOOK_HEADERS } from '../src/storage/workbook';
 
-const empty = (): Catalog => ({ ...cloneCatalog(seedCatalog), rooms: [], photos: [], terms: [], galleries: { whole_house: [] }, sample: false });
+const empty = (): Catalog => ({ ...cloneCatalog(seedCatalog), rooms: [], photos: [], terms: [], galleries: {}, sample: false });
 const bytes = (book: XLSX.WorkBook) => new Uint8Array(XLSX.write(book, { type: 'array', bookType: 'xlsx', compression: true }));
 function editWorkbook(edit: (book: XLSX.WorkBook) => void, catalog = seedCatalog) {
   const book = XLSX.read(encodeWorkbook(catalog), { type: 'array' });
@@ -52,7 +52,8 @@ test('the empty template contains headers only with column widths and filters an
   expect(decoded.issues).toEqual([]);
   const preview = previewImport(seedCatalog, decoded, new Map());
   expect(preview.issues).toEqual([]);
-  expect(preview.catalog).toMatchObject({ rooms: [], terms: [], photos: [], galleries: { whole_house: [] }, sample: false });
+  expect(preview.catalog).toMatchObject({ rooms: [], terms: [], photos: [], sample: false });
+  expect(preview.catalog.galleries).toEqual({});
   for (const name of book.SheetNames) XLSX.utils.sheet_add_aoa(book.Sheets[name], [[' ', '', '\t', '  ']], { origin: 'A20' });
   expect(previewImport(seedCatalog, decodeWorkbook(bytes(book)), new Map())).toEqual(preview);
 });
@@ -65,7 +66,7 @@ test('a workbook and its images restore all bilingual descriptions into room gal
   expect(preview.issues).toEqual([]);
   expect(preview.warnings).toBe(0);
   expect(decodeWorkbook(encodeWorkbook(preview.catalog)).photos.map(row => row.value)).toEqual(workbook.photos.map(row => row.value));
-  expect(preview.catalog.galleries.whole_house).toEqual([]);
+  expect(Object.keys(preview.catalog.galleries)).toEqual(preview.catalog.rooms.map(room => room.id));
   for (const room of preview.catalog.rooms) expect(preview.catalog.galleries[room.id]).toEqual(preview.catalog.photos.filter(photo => photo.room === room.id).map(photo => photo.id));
   expect(preview.catalog.photos.every(photo => photo.image.kind === 'local' && !photo.sample)).toBe(true);
 });
@@ -74,11 +75,10 @@ test('reimport creates a clean draft while reusing matching images', () => {
   const current = normalizePhotoFilenames(seedCatalog);
   const preview = previewImport(current, decodeWorkbook(encodeWorkbook(current)), new Map());
   expect(preview.issues).toEqual([]);
-  expect(preview.added).toBe(current.rooms.length + current.terms.length + current.photos.length);
-  expect(preview.removed).toBeGreaterThanOrEqual(current.photos.length);
+  expect(preview.catalog.rooms).toHaveLength(current.rooms.length);
+  expect(preview.catalog.terms).toHaveLength(current.terms.length);
   expect(preview.catalog.photos.map(photo => photo.image)).toEqual(current.photos.map(photo => photo.image));
   expect(preview.catalog.photos.every(photo => !photo.sample)).toBe(true);
-  expect(preview.catalog.galleries.whole_house).toEqual([]);
 });
 
 test('language rows pair by normalized filename rather than row position', () => {
@@ -152,7 +152,7 @@ test('partial sheets preserve each photo’s blanks even when a later row connec
   expect(b.blankTranslations).toEqual({ room: 'ru', style: 'ru' });
   expect(c.blankTranslations).toBeUndefined();
   expect(filenameOnly).toMatchObject({ room: '', styleId: '', paletteIds: [], materialIds: [], detailIds: [] });
-  expect(catalog.galleries).toEqual({ whole_house: [], [a.room]: [a.id, b.id, c.id] });
+  expect(catalog.galleries).toEqual({ [a.room]: [a.id, b.id, c.id] });
   const exported = XLSX.read(encodeWorkbook(catalog), { type: 'array' });
   expect(exported.Sheets.Russian.E2.v).toBe('');
   expect(exported.Sheets.Turkmen.E2.v).toBe('Dub; Daş');
@@ -293,20 +293,17 @@ test('import removes records omitted from the workbook and rebuilds galleries in
   const preview = previewImport(current, workbook, new Map());
   expect(preview.issues).toEqual([]);
   expect(preview.catalog.photos).toHaveLength(2);
-  expect(preview.catalog.galleries.whole_house).toEqual([]);
-  expect(preview.catalog.galleries[preview.catalog.photos[0].room]).toEqual(preview.catalog.photos.map(photo => photo.id));
-  expect(preview.removed).toBeGreaterThan(0);
+  expect(preview.catalog.galleries).toEqual({ [preview.catalog.photos[0].room]: preview.catalog.photos.map(photo => photo.id) });
 });
 
-test('new imported photos enter their room gallery and leave Whole House empty', () => {
+test('new imported photos enter only their room gallery', () => {
   const workbook = decodeWorkbook(encodeWorkbook(onePhoto()));
   workbook.photos[0].value.filename = 'new.jpg';
   const supplied = { ...seedCatalog.photos[0], id: 'prepared-new', sample: false };
   const preview = previewImport(seedCatalog, workbook, new Map([['new.jpg', supplied]]));
   expect(preview.issues).toEqual([]);
   expect(preview.catalog.photos).toHaveLength(1);
-  expect(preview.catalog.galleries[preview.catalog.photos[0].room]).toEqual([preview.catalog.photos[0].id]);
-  expect(preview.catalog.galleries.whole_house).toEqual([]);
+  expect(preview.catalog.galleries).toEqual({ [preview.catalog.photos[0].room]: [preview.catalog.photos[0].id] });
 });
 
 test('replacement keeps represented content and builds room galleries in Russian row order', () => {
@@ -317,9 +314,7 @@ test('replacement keeps represented content and builds room galleries in Russian
   expect(preview.issues).toEqual([]);
   expect(preview.catalog.photos.map(photo => photo.id)).not.toEqual(original.photos.slice(0, 3).reverse().map(photo => photo.id));
   expect(preview.catalog.galleries[preview.catalog.photos[0].room]).toEqual(preview.catalog.photos.map(photo => photo.id));
-  expect(preview.catalog.galleries.whole_house).toEqual([]);
   expect(preview.catalog.rooms).toHaveLength(1);
-  expect(preview.removed).toBeGreaterThanOrEqual(seedCatalog.photos.length - 3);
   expect(original).toEqual(normalizePhotoFilenames(seedCatalog));
 });
 
@@ -331,7 +326,7 @@ test('imported room membership comes entirely from the workbook', () => {
   expect(preview.issues).toEqual([]);
   expect(preview.catalog.galleries.bathroom).toBeUndefined();
   expect(preview.catalog.galleries[preview.catalog.photos[0].room]).toContain(id);
-  expect(preview.catalog.galleries.whole_house).toEqual([]);
+  expect(Object.keys(preview.catalog.galleries)).toEqual([preview.catalog.photos[0].room]);
 });
 
 test('missing images identify their spreadsheet row, while supplied files replace existing images', () => {
@@ -424,9 +419,9 @@ test('500 photos round trip with all descriptions and room order while 501 are r
 
 test('direct entry preserves unrelated draft edits and rejects duplicate vocabulary names', () => {
   const photo: Photo = { ...seedCatalog.photos[0], id: 'new-photo' };
-  const next = addDraftPhoto(seedCatalog, photo, [photo.room, 'whole_house']);
+  const next = addDraftPhoto(seedCatalog, photo);
   expect(next.photos).toHaveLength(seedCatalog.photos.length + 1);
-  expect(next.galleries.whole_house.at(-1)).toBe(photo.id);
+  expect(next.galleries).toEqual(seedCatalog.galleries);
   expect(seedCatalog.photos).not.toContainEqual(photo);
   expect(() => addDraftTerm(next, { ...next.terms[0], id: 'duplicate' })).toThrow('DUPLICATE_TERM');
 });

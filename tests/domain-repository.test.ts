@@ -1,7 +1,7 @@
 /// <reference types="node" />
 import { afterEach, beforeEach, expect, jest, test } from '@jest/globals';
 import { addDraftRoom, cloneCatalog, removeDraftOptions } from '../src/domain/catalog';
-import { createSession, rateSession } from '../src/domain/session';
+import { createSession, rateSession, undoSession } from '../src/domain/session';
 import type { Catalog } from '../src/domain/types';
 import { previewImport } from '../src/domain/catalog-transfer';
 import { decodeWorkbook, encodeWorkbook } from '../src/storage/workbook';
@@ -73,6 +73,80 @@ test('legacy room definitions are supplied when reading published, draft, and se
   expect(resumed.draft.rooms).toEqual(initial.draft.rooms);
   expect(resumed.session?.catalog.rooms).toEqual(initial.catalog.rooms);
   expect(resumed.notices).toEqual([]);
+});
+
+test.each([
+  ['whole_house', 'active'], ['whole_house', 'complete'], ['bathroom', 'active'], ['bathroom', 'complete'],
+] as const)('room migration preserves the pinned %s session when %s', async (space, status) => {
+  const { catalog: old } = await repository.loadState();
+  const [a, b, c, d] = old.galleries.bathroom;
+  const [k, ...kitchen] = old.galleries.kitchen;
+  old.galleries.bathroom = [b, a];
+  old.galleries.kitchen = kitchen;
+  old.galleries.whole_house = [k, d, b, c];
+  const draft = cloneCatalog(old);
+  draft.galleries.bathroom = [c];
+  draft.galleries.whole_house = [a, d, c, d, k];
+  draft.photos.find(photo => photo.id === k)!.room = '';
+  draft.rooms[0].labels.ru = 'Комната в черновике';
+  const originalDeck = old.galleries[space];
+  const reviewed = status === 'active' ? originalDeck.slice(0, 1) : originalDeck;
+  const payload = { id: 'previous-client', space, status, createdAt: old.createdAt, ratings: reviewed.map(photoId => ({ photoId, choice: 'like' })) };
+  const db = sqlite.__database;
+  db.prepare('UPDATE catalog_revisions SET payload = ? WHERE id = ?').run(JSON.stringify(old), old.id);
+  db.prepare('UPDATE catalog_draft SET payload = ?').run(JSON.stringify(draft));
+  db.prepare('INSERT INTO active_session (singleton, catalog_id, payload) VALUES (1, ?, ?)').run(old.id, JSON.stringify(payload));
+  db.exec('PRAGMA user_version = 1');
+
+  const upgraded = await repository.loadState();
+  expect(upgraded.notices).toEqual([]);
+  expect(upgraded.catalog.id).not.toBe(old.id);
+  expect(upgraded.catalog.version).toBe(old.version + 1);
+  expect(upgraded.catalog.galleries).toEqual({ bathroom: [b, a, d, c], bedroom: old.galleries.bedroom, living_room: old.galleries.living_room, kitchen: [...kitchen, k] });
+  expect(upgraded.draft.id).toBe(upgraded.catalog.id);
+  expect(upgraded.draft.galleries).toEqual({ ...upgraded.catalog.galleries, bathroom: [c, a, d], kitchen });
+  expect(upgraded.draft.rooms).toEqual(draft.rooms);
+  expect(upgraded.catalog.rooms).toEqual(old.rooms);
+  expect(upgraded.draft.photos).toEqual(draft.photos);
+  expect(upgraded.session).toEqual({ ...payload, catalog: old });
+  expect(await repository.loadState()).toEqual(upgraded);
+  expect(() => createSession(upgraded.catalog, 'whole_house', 'new')).toThrow('EMPTY_GALLERY');
+  expect(() => createSession(old, 'whole_house', 'new')).toThrow('EMPTY_GALLERY');
+
+  let session = upgraded.session!;
+  for (const id of originalDeck.slice(session.ratings.length)) session = rateSession(session, 'dislike', id);
+  expect(session.status).toBe('complete');
+  await repository.saveSession(session);
+  expect((await repository.loadState()).session).toEqual(session);
+  const undone = undoSession(session);
+  await repository.saveSession(undone);
+  expect((await repository.loadState()).session).toEqual(undone);
+  const next = createSession(upgraded.catalog, 'bathroom', 'next-client');
+  await repository.saveSession(next);
+  expect((await repository.loadState()).session).toEqual(next);
+  await repository.clearSession();
+  expect((await repository.getReferencedCatalogs()).some(catalog => catalog.id === old.id)).toBe(false);
+});
+
+test('a failed room migration rolls back the new revision, draft and version, then retries once', async () => {
+  const { catalog } = await repository.loadState();
+  catalog.galleries.whole_house = catalog.galleries.bedroom.slice(0, 2);
+  const original = JSON.stringify(catalog);
+  const db = sqlite.__database;
+  db.prepare('UPDATE catalog_revisions SET payload = ?').run(original);
+  db.prepare('UPDATE catalog_draft SET payload = ?').run(original);
+  db.exec('PRAGMA user_version = 1');
+  db.exec("CREATE TRIGGER fail_draft BEFORE INSERT ON catalog_draft BEGIN SELECT RAISE(ABORT, 'draft write failed'); END");
+  await expect(repository.loadState()).rejects.toThrow('draft write failed');
+  expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 1 });
+  expect(db.prepare('SELECT payload FROM catalog_revisions').all()).toEqual([{ payload: original }]);
+  expect(db.prepare('SELECT payload FROM catalog_draft').get()).toEqual({ payload: original });
+  expect(db.prepare("SELECT value FROM metadata WHERE key = 'current_catalog'").get()).toEqual({ value: catalog.id });
+  db.exec('DROP TRIGGER fail_draft');
+  const upgraded = await repository.loadState();
+  expect(upgraded.catalog.galleries).not.toHaveProperty('whole_house');
+  expect(db.prepare('PRAGMA user_version').get()).toEqual({ user_version: 2 });
+  expect(await repository.loadState()).toEqual(upgraded);
 });
 
 test('loading legacy filename data persists the backfill for drafts, revisions, and sessions', async () => {
@@ -253,7 +327,7 @@ test('replacement saves reset draft content and filename allocation history', as
     rooms: [cloneCatalog(initial.draft).rooms.find(room => room.id === source.room)!],
     terms: cloneCatalog(initial.draft).terms.filter(term => [source.styleId, ...source.paletteIds, ...source.materialIds, ...source.detailIds].includes(term.id)),
     photos: [{ ...source, id: 'replacement-photo', exportFilename: undefined, sourceFilename: undefined, sample: false }],
-    galleries: { whole_house: [], [source.room]: ['replacement-photo'] },
+    galleries: { [source.room]: ['replacement-photo'] },
     sample: false,
   };
   await repository.saveDraft(replacement, { replace: true });
@@ -261,7 +335,7 @@ test('replacement saves reset draft content and filename allocation history', as
   expect(saved.photos).toHaveLength(1);
   expect(saved.photos[0]).toMatchObject({ id: 'replacement-photo', exportFilename: 'photo-0001.jpg', sample: false });
   expect(saved.nextPhotoNumber).toBe(2);
-  expect(saved.galleries.whole_house).toEqual([]);
+  expect(saved.galleries).toEqual({ [source.room]: ['replacement-photo'] });
 });
 
 test('partial and empty Excel replacements survive SQLite reloads and preserve the active customer catalog', async () => {
@@ -289,6 +363,6 @@ test('partial and empty Excel replacements survive SQLite reloads and preserve t
   const empty = previewImport(reopened.draft, decodeWorkbook(encodeWorkbook()), new Map());
   await repository.saveDraft(empty.catalog, { replace: true });
   expect(await repository.loadState()).toMatchObject({
-    notices: [], catalog, session, draft: { rooms: [], terms: [], photos: [], galleries: { whole_house: [] }, nextPhotoNumber: 1, sample: false },
+    notices: [], catalog, session, draft: { rooms: [], terms: [], photos: [], galleries: {}, nextPhotoNumber: 1, sample: false },
   });
 });

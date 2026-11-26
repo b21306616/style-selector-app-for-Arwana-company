@@ -12,7 +12,7 @@ import { useApp } from '../../state/AppProvider';
 import { DashboardWorkbench } from '../../features/staff/DashboardWorkbench';
 import { useStaffWorkspace } from '../../features/staff/workspace-context';
 import { staffStyles as s } from '../../features/staff/shared';
-import { Space, type Photo } from '../../domain/types';
+import type { Room, Photo } from '../../domain/types';
 import { catalogSpaces } from '../../domain/rooms';
 import { photoFieldsForLanguage } from '../../domain/photo-metadata';
 import { messageForError } from '../../domain/errors';
@@ -23,7 +23,7 @@ export default function StaffDashboard() {
   const { contentWidth, columns, fontScale } = useLayout();
   const [reset, setReset] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [galleryModal, setGalleryModal] = useState<{ space: Space; mode: 'published' | 'draft' } | null>(null);
+  const [galleryModal, setGalleryModal] = useState<{ space: Room; mode: 'published' | 'draft' } | null>(null);
   const [viewingPhoto, setViewingPhoto] = useState<Photo | null>(null);
 
   const t = (tk: string, ru: string) => tx(language, tk, ru);
@@ -67,6 +67,7 @@ export default function StaffDashboard() {
     <Button title={t('Barlamak we çap etmek', 'Проверить и опубликовать')} onPress={() => router.push('/staff/preview')} disabled={workspace.busy} />
     <Text accessibilityRole="header" style={typography.subheading}>{t('Toplumlara umumy syn', 'Обзор подборок')}</Text>
     <View style={styles.overviewCard}>
+      {!overviewSpaces.length && <Text style={[typography.small, { padding: 14 }]}>{t('Entäk otag ýok.', 'Пока нет комнат.')}</Text>}
       {overviewSpaces.map((space, index) => {
         const publishedCount = catalog.galleries[space]?.length ?? 0;
         const draftCount = draft.galleries[space]?.length ?? 0;

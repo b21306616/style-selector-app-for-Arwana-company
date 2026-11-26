@@ -7,7 +7,7 @@ import { ConfirmDialog } from '../components/ConfirmDialog';
 import { IconButton, UndoIconButton } from '../components/Icon';
 import { PhotoTile } from '../components/PhotoTile';
 import { PhotoImage } from '../components/PhotoImage';
-import { Button, Chip, EmptyState, ErrorBanner, Header, Screen, colors, errorText, photoCount, spaceLabel, tx, typography, useLayout } from '../components/ui';
+import { Button, Chip, EmptyState, ErrorBanner, Header, Screen, colors, errorText, photoCount, sessionLabel, spaceLabel, tx, typography, useLayout } from '../components/ui';
 import { summarizeSession } from '../domain/scoring';
 import type { Photo } from '../domain/types';
 import { useApp } from '../state/AppProvider';
@@ -64,7 +64,7 @@ export default function ResultScreen() {
         {failure || app.error ? <ErrorBanner message={failure ?? errorText(app.error, language)} /> : null}
         <View style={styles.row}><Chip label={complete ? tx(language, 'Siziň stiliňiz', 'Ваш стиль') : tx(language, 'Deslapky netije', 'Предварительный результат')} selected /><Text style={typography.small}>{session.ratings.length}/{session.catalog.galleries[session.space].length} {tx(language, 'görüldi', 'просмотрено')}</Text></View>
         <Text accessibilityRole="header" style={layout.fontScale >= 1.5 ? typography.subheading : typography.heading}>{styleTitle}</Text>
-        <View style={styles.row}><Text style={[typography.small, { flex: 1 }]}>{photoCount(likedPhotos.length, language)} · {spaceLabel(session.space, language, session.catalog.rooms)}</Text><Button title={tx(language, 'Jikme-jik', 'Подробнее')} variant="ghost" onPress={() => setDetailsOpen(true)} /></View>
+        <View style={styles.row}><Text style={[typography.small, { flex: 1 }]}>{photoCount(likedPhotos.length, language)} · {sessionLabel(session, language)}</Text><Button title={tx(language, 'Jikme-jik', 'Подробнее')} variant="ghost" onPress={() => setDetailsOpen(true)} /></View>
       </View>}
       renderItem={({ item, index }) => <PhotoTile photo={item} language={language} title={spaceLabel(item.room, language, session.catalog.rooms)} label={tx(language, 'Halanan suraty açmak', 'Открыть понравившееся фото') + ' ' + (index + 1) + ': ' + spaceLabel(item.room, language, session.catalog.rooms)} onPress={() => setSelected(index)} style={{ width: (layout.contentWidth - (columns - 1) * 12) / columns, marginBottom: 12 }} imageStyle={{ aspectRatio: 1.15 }} />}
       ListEmptyComponent={<View style={styles.empty}><Text style={typography.body}>{tx(language, 'Halanan surat ýok. Işgär bilen başga toplumy synap görüň.', 'Нет понравившихся фото. Попробуйте другую подборку с сотрудником.')}</Text></View>}

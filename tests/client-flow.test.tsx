@@ -1,5 +1,6 @@
 import { beforeEach, expect, jest, test } from '@jest/globals';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { Platform, StyleSheet, useWindowDimensions } from 'react-native';
 import { router } from 'expo-router';
 import GalleryScreen from '../src/app/gallery';
 import HomeScreen from '../src/app/index';
@@ -8,6 +9,7 @@ import { seedCatalog } from '../src/data/catalog';
 import { addDraftRoom } from '../src/domain/catalog';
 import type { Session } from '../src/domain/types';
 import { useApp, type AppContextValue } from '../src/state/AppProvider';
+import { singleRoomCatalog } from './room-fixture';
 
 jest.mock('expo-router', () => ({
   router: { push: jest.fn(), replace: jest.fn(), setParams: jest.fn() },
@@ -34,10 +36,11 @@ jest.mock('../src/components/SwipePhoto', () => {
   ) };
 });
 
+const longCatalog = singleRoomCatalog(32);
 function sessionWith(count: number, complete = false): Session {
   return {
-    id: 'client-test', catalog: seedCatalog, space: 'whole_house', createdAt: '2026-11-17T00:00:00.000Z',
-    ratings: seedCatalog.galleries.whole_house.slice(0, count).map(photoId => ({ photoId, choice: 'like' })),
+    id: 'client-test', catalog: longCatalog, space: 'bathroom', createdAt: '2026-11-17T00:00:00.000Z',
+    ratings: longCatalog.galleries.bathroom.slice(0, count).map(photoId => ({ photoId, choice: 'like' })),
     status: complete ? 'complete' : 'active',
   };
 }
@@ -67,6 +70,89 @@ test('custom spaces become customer choices only in the published catalog', asyn
   await view.rerender(<HomeScreen />);
   await fireEvent.press(screen.getByRole('button', { name: 'Iş otagy, 1 surat' }));
   expect(app.startSession).toHaveBeenCalledWith('office');
+});
+
+test('an empty published catalog still offers staff access, and an empty room cannot start a session', async () => {
+  app.session = null;
+  app.catalog = { ...seedCatalog, rooms: [], galleries: {}, photos: [], sample: false };
+  const view = await render(<HomeScreen />);
+  expect(screen.getByText('Entäk çap edilen otag ýok.')).toBeOnTheScreen();
+  await fireEvent.press(screen.getByRole('button', { name: 'Işgärler' }));
+  expect(router.push).toHaveBeenCalledWith('/staff/dashboard');
+  app.catalog = addDraftRoom(app.catalog, { id: 'office', labels: { tk: 'Iş otagy', ru: 'Кабинет' } });
+  await view.rerender(<HomeScreen />);
+  expect(screen.getByRole('button', { name: 'Iş otagy, 0 surat' })).toBeDisabled();
+});
+
+test('a saved mixed session can resume from home without offering a new mixed gallery', async () => {
+  const deck = [seedCatalog.galleries.bathroom[0], seedCatalog.galleries.kitchen[0]];
+  const legacy = { ...seedCatalog, galleries: { ...seedCatalog.galleries, whole_house: deck } };
+  app.session = { ...sessionWith(0), catalog: legacy, space: 'whole_house', ratings: [{ photoId: deck[0], choice: 'like' }] };
+  await render(<HomeScreen />);
+  expect(screen.getByText('Bütin jaý · 1/2')).toBeOnTheScreen();
+  expect(screen.queryByRole('button', { name: /Bütin jaý/ })).toBeNull();
+  await fireEvent.press(screen.getByRole('button', { name: 'Dowam etmek' }));
+  expect(router.push).toHaveBeenCalledWith('/gallery');
+  expect(app.startSession).not.toHaveBeenCalled();
+});
+
+test('a saved mixed session finishes through gallery and displays room titles in results', async () => {
+  const deck = [seedCatalog.galleries.bathroom[0], seedCatalog.galleries.kitchen[0]];
+  const legacy = { ...seedCatalog, galleries: { ...seedCatalog.galleries, whole_house: deck } };
+  app.language = 'ru';
+  app.session = { ...sessionWith(0), catalog: legacy, space: 'whole_house', ratings: [{ photoId: deck[0], choice: 'like' }] };
+  const gallery = await render(<GalleryScreen />);
+  expect(screen.getByText('Весь дом')).toBeOnTheScreen();
+  await fireEvent.press(screen.getByRole('button', { name: 'Image finished loading' }));
+  await fireEvent.press(screen.getByRole('button', { name: 'Swipe like' }));
+  expect(app.rate).toHaveBeenCalledWith('like');
+
+  app.session = { ...app.session, ratings: deck.map(photoId => ({ photoId, choice: 'like' })), status: 'complete' };
+  await gallery.unmount();
+  await render(<ResultScreen />);
+  expect(screen.getByText('2 фото · Весь дом')).toBeOnTheScreen();
+  expect(screen.getByRole('button', { name: 'Открыть понравившееся фото 1: Ванная' })).toBeOnTheScreen();
+  expect(screen.getByRole('button', { name: 'Открыть понравившееся фото 2: Кухня' })).toBeOnTheScreen();
+});
+
+test('a saved room session resumes to gallery when active and to result when complete', async () => {
+  app.language = 'ru';
+  app.session = sessionWith(3);
+  const view = await render(<HomeScreen />);
+  expect(screen.getByText('Ванная · 3/32')).toBeOnTheScreen();
+  await fireEvent.press(screen.getByRole('button', { name: 'Продолжить' }));
+  expect(router.push).toHaveBeenCalledWith('/gallery');
+
+  app.session = sessionWith(32, true);
+  await view.rerender(<HomeScreen />);
+  await fireEvent.press(screen.getByRole('button', { name: 'Результат' }));
+  expect(router.push).toHaveBeenCalledWith('/result');
+});
+
+test.each([
+  ['ru', 'android'], ['ru', 'ios'], ['tk', 'android'], ['tk', 'ios'],
+] as const)('home room grid and empty catalog remain accessible on %s %s narrow layout with large text', async (language, os) => {
+  app.language = language;
+  app.session = null;
+  const ru = language === 'ru';
+  const platform = jest.replaceProperty(Platform, 'OS', os);
+  const dimensions = jest.spyOn(require('react-native'), 'useWindowDimensions').mockReturnValue({ width: 320, height: 568, scale: 1, fontScale: 2 } satisfies ReturnType<typeof useWindowDimensions>);
+  try {
+    const view = await render(<HomeScreen />);
+    const tile = screen.getByRole('button', { name: ru ? 'Кухня, 12 фото' : 'Aşhana, 12 surat' });
+    expect(StyleSheet.flatten(tile.props.style)).toMatchObject({ width: 296 });
+    const staff = screen.getByRole('button', { name: ru ? 'Сотрудникам' : 'Işgärler' });
+    expect(staff).toBeEnabled();
+
+    app.catalog = { ...seedCatalog, rooms: [], galleries: {}, photos: [], sample: false };
+    await view.rerender(<HomeScreen />);
+    expect(screen.getByText(ru ? 'Пока нет опубликованных комнат.' : 'Entäk çap edilen otag ýok.')).toBeOnTheScreen();
+    await fireEvent.press(screen.getByRole('button', { name: ru ? 'Сотрудникам' : 'Işgärler' }));
+    expect(router.push).toHaveBeenCalledWith('/staff/dashboard');
+  } finally {
+    platform.restore();
+    dimensions.mockRestore();
+  }
 });
 
 test('gallery hides style metadata and only accepts one rating after the image loads', async () => {
@@ -179,7 +265,7 @@ test('undo brings a liked photo back from the like side', async () => {
 });
 
 test('undo brings a disliked photo back from the dislike side', async () => {
-  const photoId = seedCatalog.galleries.whole_house[0];
+  const photoId = longCatalog.galleries.bathroom[0];
   app.session = { ...sessionWith(1), ratings: [{ photoId, choice: 'dislike' }] };
   jest.mocked(app.undo).mockImplementation(async () => { app = { ...app, session: sessionWith(0) }; });
   const view = await render(<GalleryScreen />);

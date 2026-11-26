@@ -2,9 +2,24 @@
 
 Implementation checks were run on Windows with Node 26.13.1, Expo SDK 58, and React Native 0.88.1 on 17 November 2026. Android and iOS are the target platforms. This record distinguishes automated checks, user-confirmed device checks, and the acceptance work still pending.
 
+## Independent rooms and import review — 27 November 2026
+
+The home screen replaces the Whole House tile with a responsive room grid, handles empty catalogs while keeping staff access at the lower right, and starts new installations with four editable sample rooms of 12 photos each. Staff can create rooms from the draft card or Excel, search all photos (including roomless imports) via **Все комнаты**, and publish independent room galleries. **Проверка импорта** / **Importy barlamak** uses a single-column layout showing the workbook name, resulting photo count, first blocking error with expandable additional errors, pre-publish reminder, and explicit replacement or empty-draft clear confirmations. Existing devices migrate published and draft galleries in one SQLite v2 transaction while retaining active room and Whole House sessions on their original revisions.
+
+| Check | Result |
+| --- | --- |
+| `npm run typecheck` | Passed |
+| `npm run lint` (`EXPO_NO_TELEMETRY=1`) | Passed |
+| `npm test` | 19 suites, 220 tests passed |
+| Android JavaScript/Hermes export | Passed; 5.42 MiB Hermes bundle, 123 assets |
+| iOS JavaScript/Hermes export | Passed; 5.22 MiB Hermes bundle, 120 assets |
+| `npm run validate:catalog -- --exports` | All 48 full images and 48 thumbnails verified in both exports |
+
+Automated tests cover Russian and Turkmen across narrow (320 px, `fontScale: 2`) Android and iOS layouts, ready/missing-image/multiple-error/incomplete/empty workbook imports, room creation and publication, empty catalogs, SQLite v2 migration order/deduplication/rollback, and resuming room and Whole House sessions. Physical device checks remain manual acceptance work in [Device acceptance walkthrough](device-preview.md).
+
 ## Excel draft replacement — 26 November 2026
 
-The six-column template requires a matching filename on both sheets for each photo. The other five cells may be blank in either language. After confirmation, a partial workbook clears omitted data and a headers-only workbook clears the whole draft. Room galleries follow Russian-sheet order, roomless photos stay in the library, and Whole House starts empty.
+The six-column template requires a matching filename on both sheets for each photo. The other five cells may be blank in either language. After confirmation, a partial workbook clears omitted data and a headers-only workbook clears the whole draft. Each named room has a gallery in Russian-sheet order. Roomless photos stay in the library.
 
 Automated checks exercise blank rows and cells, one-sided lists, translation conflicts, filename matching, missing images, draft reloads, and workbook re-export. Confirmation tests cover Russian and Turkmen. The device walkthrough covers native pickers and sharing. [Device acceptance walkthrough](device-preview.md)
 

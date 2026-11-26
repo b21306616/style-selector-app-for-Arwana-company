@@ -3,7 +3,7 @@ import { cloneCatalog } from '../domain/catalog';
 import { normalizePhotoFilenames } from '../domain/photo-filenames';
 import { AppError, errorCode } from '../domain/errors';
 import { createSession, rateSession, undoSession } from '../domain/session';
-import type { Catalog, Choice, Language, Session, Space } from '../domain/types';
+import type { Catalog, Choice, Language, Room, Session } from '../domain/types';
 import { cleanupImageFiles } from '../storage/images';
 import * as repository from '../storage/repository';
 
@@ -20,7 +20,7 @@ interface AppState {
 export interface AppContextValue extends AppState {
   busy: boolean;
   setLanguage(language: Language): Promise<void>;
-  startSession(space: Space): Promise<void>;
+  startSession(room: Room): Promise<void>;
   rate(choice: Choice): Promise<void>;
   undo(): Promise<void>;
   clearSession(): Promise<void>;
@@ -100,10 +100,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
     apply({ language });
   }), [apply, mutate]);
 
-  const startSession = useCallback((space: Space) => mutate(async () => {
+  const startSession = useCallback((room: Room) => mutate(async () => {
     const catalog = stateRef.current.catalog;
     if (!catalog) throw new AppError('CATALOG_DAMAGED');
-    const next = createSession(catalog, space, `session-${Date.now()}`);
+    const next = createSession(catalog, room, `session-${Date.now()}`);
     await repository.saveSession(next);
     apply({ session: next });
   }), [apply, mutate]);

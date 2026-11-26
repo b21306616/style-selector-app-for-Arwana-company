@@ -1,5 +1,5 @@
 import { type Catalog, type Language, type RoomDefinition, type TermKind } from './types';
-import { catalogSpaces, cleanLabels, nameKey, sameName, validDraftLabels, validLabels, validRoomId } from './rooms';
+import { cleanLabels, nameKey, sameName, validDraftLabels, validLabels, validRoomId } from './rooms';
 import { AppError } from './errors';
 
 export interface ValidationIssue {
@@ -20,7 +20,7 @@ export function validateCatalog(input: unknown): ValidationIssue[] {
     return issues;
   }
   const catalog = input as Catalog;
-  if (!Array.isArray(catalog.rooms) || !Array.isArray(catalog.terms) || !Array.isArray(catalog.photos) || !catalog.galleries || typeof catalog.galleries !== 'object') {
+  if (!Array.isArray(catalog.rooms) || !Array.isArray(catalog.terms) || !Array.isArray(catalog.photos) || !catalog.galleries || typeof catalog.galleries !== 'object' || Array.isArray(catalog.galleries)) {
     add('STRUCTURE', 'catalog', 'Katalogyň hökmany bölümleri ýok.', 'В каталоге отсутствуют обязательные разделы.');
     return issues;
   }
@@ -44,9 +44,7 @@ export function validateCatalog(input: unknown): ValidationIssue[] {
   if (duplicateRoomName) {
     add('ROOM_NAME', 'rooms', 'Otaglaryň atlary gaýtalanmaly däl.', 'Названия комнат не должны повторяться.');
   }
-  const spaces = catalogSpaces(catalog);
-  const spaceIds = new Set(spaces);
-  if (Object.keys(catalog.galleries).some(id => !spaceIds.has(id))) add('GALLERY', 'rooms', 'Näbelli otagyň toplumy bar.', 'Есть подборка неизвестной комнаты.');
+  if (Object.keys(catalog.galleries).some(id => !roomIds.has(id))) add('GALLERY', 'rooms', 'Näbelli otagyň toplumy bar.', 'Есть подборка неизвестной комнаты.');
   const terms = new Map<string, TermKind>();
   for (const term of catalog.terms) {
     if (!term || !nonempty(term.id) || !kinds.includes(term.kind)) {
@@ -57,7 +55,7 @@ export function validateCatalog(input: unknown): ValidationIssue[] {
     terms.set(term.id, term.kind);
     if (!nonempty(term.labels?.tk) || !nonempty(term.labels?.ru)) add('TERM_LABEL', term.id, 'Türkmençe we rusça atlary goşuň.', 'Добавьте название на русском и туркменском.');
   }
-  const selectedIds = new Set(spaces.flatMap((space) => Array.isArray(catalog.galleries[space]) ? catalog.galleries[space] : []));
+  const selectedIds = new Set([...roomIds].flatMap((id) => Array.isArray(catalog.galleries[id]) ? catalog.galleries[id] : []));
   const photoIds = new Set<string>();
   const photoRooms = new Map<string, string>();
   for (const photo of catalog.photos) {
@@ -86,7 +84,7 @@ export function validateCatalog(input: unknown): ValidationIssue[] {
     }
     if (!Number.isFinite(photo.width) || !Number.isFinite(photo.height) || photo.width <= 0 || photo.height <= 0) add('DIMENSIONS', photo.id, 'Suratyň ölçegleri nädogry.', 'Некорректные размеры изображения.');
   }
-  for (const space of spaces) {
+  for (const space of roomIds) {
     const deck = catalog.galleries[space];
     if (!Array.isArray(deck)) {
       add('GALLERY', space, 'Surat toplumy ýok.', 'Галерея отсутствует.');
@@ -96,7 +94,7 @@ export function validateCatalog(input: unknown): ValidationIssue[] {
     for (const id of deck) {
       if (!photoIds.has(id)) add('GALLERY_PHOTO', space, 'Saýlanan surat ýok.', 'Выбранная фотография не существует.');
     }
-    if (space !== 'whole_house' && deck.some((id) => photoRooms.get(id) !== space)) add('GALLERY_ROOM', space, 'Otagyň surat toplumynda başga otagyň suraty bar.', 'В галерее есть фото другой комнаты.');
+    if (deck.some((id) => photoRooms.get(id) !== space)) add('GALLERY_ROOM', space, 'Otagyň surat toplumynda başga otagyň suraty bar.', 'В галерее есть фото другой комнаты.');
   }
   return issues;
 }

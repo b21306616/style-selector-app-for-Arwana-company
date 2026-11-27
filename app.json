@@ -8,9 +8,11 @@
     "scheme": "arwanastyleselector",
     "userInterfaceStyle": "light",
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.begench.arwanastyleselector"
     },
     "android": {
+      "package": "com.begench.arwanastyleselector",
       "adaptiveIcon": {
         "backgroundColor": "#F5F3EC",
         "foregroundImage": "./assets/images/arwana-foreground.png"
@@ -41,12 +43,21 @@
           "cameraPermission": false,
           "microphonePermission": false
         }
-      ],
-      "expo-web-browser"
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {
+        "asyncRoutes": {
+          "web": true
+        }
+      },
+      "eas": {
+        "projectId": "30495913-b0f8-43fb-a1f8-990e67b3ee47"
+      }
     }
   }
 }

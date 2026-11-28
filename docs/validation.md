@@ -2,6 +2,22 @@
 
 Implementation checks were run on Windows with Node 26.13.1, Expo SDK 58, and React Native 0.88.1 on 17 November 2026. Android and iOS are the target platforms. This record distinguishes automated checks, user-confirmed device checks, and the acceptance work still pending.
 
+## Responsive swipe gallery and smooth undo — 28 November 2026
+
+The gallery places Back, the room name, and the `current / total` counter above the deck, moves Undo and the preliminary-result button (shown after 20 saved ratings) below the deck—or combines them into the top toolbar on landscape viewports shorter than 500 dp—uses 12 dp / 24 dp side margins and 8 dp spacing, removes the Russian and Turkmen first-photo hints, and clips swipes to the deck while centering photos with `contentFit="contain"` over the ivory background. `SwipePhoto` keeps at most three full-size views mounted (previous, current, next), promotes the prepared next photo in place via `onDisplay` without remounting or flashing a spinner, starts persistence on release, holds slow transitions or failed saves safely, allows independent image retry, and animates Undo and results-screen returns from the original choice side with Reduce Motion support.
+
+| Check | Result |
+| --- | --- |
+| `npm run typecheck` | Passed |
+| `npm run lint` (`EXPO_NO_TELEMETRY=1`) | Passed |
+| `npm test` | 20 suites, 239 tests passed |
+| Android JavaScript/Hermes export | Passed; 5.43 MiB Hermes bundle, 123 assets |
+| iOS JavaScript/Hermes export | Passed; 5.23 MiB Hermes bundle, 120 assets |
+| `npm run validate:catalog -- --exports` | All 48 full images and 48 thumbnails verified in both exports |
+| Headless Chrome Web QA (`artifacts/swipe-gallery-qa/verify.cjs`) | Passed across 7 layout cases (`320×568`–`1280×800`, 1×–2× text) and 163 screencast frames (swipes, undos, canceled drag, result entrances) |
+
+Automated Jest tests exercise the real `SwipePhoto`, `PhotoImage`, `GalleryScreen`, `ResultScreen`, and `AppProvider` components with mocked native gesture/animation/image/storage boundaries, and the headless Chrome harness exercises a Web bundle (`react-native-web`) with synthetic aspect-ratio markers; physical Android and iOS device checks (native `onDisplay` timing, gesture physics, Reduce Motion, orientation changes, large text, and notched safe areas in Expo Go) remain manual acceptance work in [Device acceptance walkthrough](device-preview.md).
+
 ## Independent rooms and import review — 27 November 2026
 
 The home screen replaces the Whole House tile with a responsive room grid, handles empty catalogs while keeping staff access at the lower right, and starts new installations with four editable sample rooms of 12 photos each. Staff can create rooms from the draft card or Excel, search all photos (including roomless imports) via **Все комнаты**, and publish independent room galleries. **Проверка импорта** / **Importy barlamak** uses a single-column layout showing the workbook name, resulting photo count, first blocking error with expandable additional errors, pre-publish reminder, and explicit replacement or empty-draft clear confirmations. Existing devices migrate published and draft galleries in one SQLite v2 transaction while retaining active room and Whole House sessions on their original revisions.

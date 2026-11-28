@@ -1,273 +1,196 @@
-import { useEffect, useRef } from 'react';
-import { StyleSheet, Text, useWindowDimensions, View } from 'react-native';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { ActivityIndicator, StyleSheet, Text, useWindowDimensions, View } from 'react-native';
 import { GestureDetector, usePanGesture } from 'react-native-gesture-handler';
-import Animated, {
-  Easing,
-  Extrapolation,
-  interpolate,
-  useAnimatedStyle,
-  useReducedMotion,
-  useSharedValue,
-  withSpring,
-  withTiming,
-} from 'react-native-reanimated';
+import Animated, { cancelAnimation, clamp, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 import type { Choice, Language, Photo } from '../domain/types';
 import { PhotoImage } from './PhotoImage';
-import { colors, tx } from './ui';
+import { Button, colors, tx, typography } from './ui';
 
-export interface SwipePhotoProps {
+export interface DeckMotion {
+  kind: 'vote' | 'undo' | 'entrance' | 'restore';
+  from: number;
+  choice: Choice;
+  velocity: number;
+}
+
+interface SwipePhotoProps {
+  previousPhoto?: Photo;
   photo: Photo;
   nextPhoto?: Photo;
   language: Language;
-  enabled: boolean;
-  onChoice: (choice: Choice) => void;
-  onReady: () => void;
-  onFailure: () => void;
   label: string;
-  entrance?: Choice | null;
-  onEntranceSettled?: () => void;
+  disabled: boolean;
+  complete: boolean;
+  motion: DeckMotion | null;
+  saved: boolean;
+  onChoice: (id: string, choice: Choice, velocity: number) => boolean;
+  onSettled: (motion: DeckMotion) => void;
 }
 
-export function SwipePhoto({ photo, nextPhoto, language, enabled, onChoice, onReady, onFailure, label, entrance = null, onEntranceSettled }: SwipePhotoProps) {
-  const { width: windowWidth } = useWindowDimensions();
-  const exitDistance = Math.max(windowWidth * 1.3, 520);
-  const reduceMotion = useReducedMotion();
-  const motionReduced = reduceMotion === true;
-  const entranceX = entrance === 'like' ? exitDistance : entrance === 'dislike' ? -exitDistance : 0;
-  const x = useSharedValue(motionReduced ? 0 : entranceX);
-  const y = useSharedValue(0);
-  const isCommitted = useSharedValue(false);
-  const entering = useSharedValue(Boolean(entrance) && !motionReduced);
-  const entranceOnMount = useRef(entrance);
-  const settledOnMount = useRef(onEntranceSettled);
+type LoadStatus = 'loading' | 'ready' | 'failed';
+interface CardImage { photo: Photo; status: LoadStatus; attempt: number }
+const newImage = (photo: Photo): CardImage => ({ photo, status: 'loading', attempt: 0 });
+const spring = { mass: 0.65, stiffness: 340, damping: 28, overshootClamping: true, energyThreshold: 0.000001 };
+
+export function SwipePhoto({ previousPhoto, photo, nextPhoto, language, label, disabled, complete, motion, saved, onChoice, onSettled }: SwipePhotoProps) {
+  const windowSize = useWindowDimensions();
+  const [size, setSize] = useState({ width: windowSize.width, height: windowSize.height });
+  const photos = useMemo(() => [previousPhoto, photo, nextPhoto].filter((item): item is Photo => !!item), [previousPhoto, photo, nextPhoto]);
+  const [images, setImages] = useState(() => ({ photos, cards: photos.map(newImage) }));
+  if (images.photos !== photos) {
+    // Reconcile before drawing. A promoted card keeps both its native view and its display status.
+    setImages({ photos, cards: photos.map(item => images.cards.find(card => card.photo === item) ?? newImage(item)) });
+  }
+  const updateImage = useCallback((image: CardImage, status: LoadStatus) => {
+    setImages(current => {
+      if (image.status === status || !current.cards.includes(image)) return current;
+      return { ...current, cards: current.cards.map(card => card === image
+        ? { ...card, status, attempt: card.attempt + (status === 'loading' ? 1 : 0) } : card) };
+    });
+  }, []);
+  const next = images.cards.find(card => card.photo === nextPhoto);
+  const nextReady = next ? next.status !== 'loading' : saved;
+
+  return <View style={styles.stage} onLayout={({ nativeEvent: { layout } }) => {
+    const { width, height } = layout;
+    if (width > 0 && height > 0) setSize(current => current.width === width && current.height === height ? current : { width, height });
+  }}>
+    {images.cards.map(image => {
+      const current = image.photo === photo;
+      const previous = image.photo === previousPhoto;
+      const handlesMotion = motion?.kind === 'undo' ? previous : current;
+      const canAnimate = motion?.kind === 'vote' ? nextReady : image.status !== 'loading' && (motion?.kind !== 'undo' || saved);
+      return <SwipeCard key={image.photo.id} image={image} current={current} previous={previous}
+        label={current ? label : undefined} language={language} enabled={current && !disabled && image.status === 'ready'}
+        complete={complete} motion={handlesMotion ? motion : null} nextReady={nextReady} canAnimate={canAnimate}
+        width={size.width} distance={size.width + size.height * 0.06 + 4} onChoice={onChoice} onSettled={onSettled} updateImage={updateImage} />;
+    })}
+  </View>;
+}
+
+interface SwipeCardProps extends Pick<SwipePhotoProps, 'language' | 'complete' | 'motion' | 'onChoice' | 'onSettled'> {
+  image: CardImage;
+  current: boolean;
+  previous: boolean;
+  label?: string;
+  enabled: boolean;
+  nextReady: boolean;
+  canAnimate: boolean;
+  width: number;
+  distance: number;
+  updateImage: (image: CardImage, status: LoadStatus) => void;
+}
+
+function SwipeCard({ image, current, previous, label, language, enabled, complete, motion, nextReady, canAnimate, width, distance, onChoice, onSettled, updateImage }: SwipeCardProps) {
+  const reduceMotion = useReducedMotion() === true;
+  const x = useSharedValue(0);
+  const entry = useSharedValue(0);
+  const committed = useSharedValue(false);
+  const dragStart = useSharedValue({ offset: 0, waiting: false });
+  const returning = motion?.kind === 'undo' || motion?.kind === 'entrance';
+  const origin = motion?.choice === 'like' ? distance : -distance;
+
+  useLayoutEffect(() => {
+    if (!motion) {
+      committed.set(false);
+      entry.set(0);
+      if (!complete) x.set(0);
+    }
+  }, [motion, current, complete, committed, entry, x]);
 
   useEffect(() => {
-    const initial = entranceOnMount.current;
-    if (!initial) return;
-    if (motionReduced) {
-      x.value = 0;
-      y.value = 0;
-      entering.value = false;
-      settledOnMount.current?.();
+    if (!motion || !canAnimate) return;
+    const value = returning ? entry : x;
+    const target = returning ? 1 : motion.kind === 'vote' ? origin : 0;
+    const done = () => onSettled(motion);
+    if (reduceMotion) {
+      value.set(target);
+      done();
       return;
     }
-    entering.value = true;
-    const origin = initial === 'like' ? exitDistance : -exitDistance;
-    const finishEntrance = () => settledOnMount.current?.();
-    x.value = origin;
-    x.value = withTiming(0, { duration: 240, easing: Easing.out(Easing.quad) }, (finished) => {
+    const velocity = motion.kind === 'vote' ? clamp(motion.velocity * Math.sign(origin), 0, 2600) * Math.sign(origin) : 0;
+    value.set(withSpring(target, { ...spring, velocity }, finished => {
       'worklet';
-      if (finished) {
-        entering.value = false;
-        scheduleOnRN(finishEntrance);
-      }
-    });
-    // The return belongs to the card that mounted with an entrance. A later prop change is the photo already on screen, and must not fly in again.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+      if (finished) scheduleOnRN(done);
+    }));
+    return () => cancelAnimation(value);
+  }, [motion, canAnimate, returning, entry, x, origin, reduceMotion, onSettled]);
 
+  const requestVote = (choice: Choice, velocity: number) => {
+    if (!enabled || !onChoice(image.photo.id, choice, velocity)) {
+      committed.set(false);
+      x.set(reduceMotion ? 0 : withSpring(0, spring));
+    }
+  };
+  const threshold = clamp(width * 0.23, 56, 100);
   const gesture = usePanGesture({
-    enabled,
-    activeOffsetX: [-12, 12],
-    failOffsetY: [-36, 36],
-    maxPointers: 1,
-    onUpdate: (event) => {
+    enabled, activeOffsetX: [-12, 12], failOffsetY: [-36, 36], maxPointers: 1,
+    onActivate: () => {
       'worklet';
-      if (!isCommitted.value && !entering.value) {
-        // eslint-disable-next-line react-hooks/immutability -- Reanimated shared values mutate only in this UI worklet.
-        x.value = event.translationX;
-        // eslint-disable-next-line react-hooks/immutability -- Reanimated shared values mutate only in this UI worklet.
-        y.value = event.translationY * 0.18;
-      }
+      if (committed.get()) return;
+      cancelAnimation(x);
+      dragStart.set({ offset: x.get(), waiting: !nextReady });
     },
-    onDeactivate: (event) => {
+    onUpdate: event => {
       'worklet';
-      if (isCommitted.value || entering.value) return;
-      const isQuickFlick = Math.abs(event.translationX) > 28 && Math.abs(event.velocityX) > 600;
-      const isPastThreshold = Math.abs(event.translationX) > 85;
-
-      if (!event.canceled && (isPastThreshold || isQuickFlick)) {
-        isCommitted.value = true;
-        const choice: Choice = event.translationX > 0 ? 'like' : 'dislike';
-        const targetX = choice === 'like' ? exitDistance : -exitDistance;
-        const targetY = Math.max(-150, Math.min(150, event.translationY * 0.35 + (event.velocityY * 0.04)));
-
-        if (reduceMotion) {
-          // eslint-disable-next-line react-hooks/immutability -- Reanimated shared values mutate only in this UI worklet.
-          x.value = targetX;
-          scheduleOnRN(onChoice, choice);
-        } else {
-          // eslint-disable-next-line react-hooks/immutability -- Reanimated shared values mutate only in this UI worklet.
-          y.value = withTiming(targetY, { duration: 240, easing: Easing.out(Easing.quad) });
-          x.value = withTiming(
-            targetX,
-            { duration: 240, easing: Easing.out(Easing.quad) },
-            (finished) => {
-              'worklet';
-              if (finished) {
-                scheduleOnRN(onChoice, choice);
-              }
-            }
-          );
-        }
+      if (committed.get() || reduceMotion) return;
+      // Keep the same resistance under the finger if decoding finishes during a drag.
+      const start = dragStart.get();
+      const limit = width * 0.45;
+      const travel = start.waiting ? limit * Math.tanh(event.translationX / Math.max(limit, 1)) : event.translationX;
+      x.set(start.offset + travel);
+    },
+    onDeactivate: event => {
+      'worklet';
+      if (committed.get()) return;
+      const { translationX, velocityX } = event;
+      const flick = Math.abs(translationX) > 28 && Math.sign(translationX) * velocityX > 600;
+      if (!event.canceled && (Math.abs(translationX) > threshold || flick)) {
+        committed.set(true);
+        scheduleOnRN(requestVote, translationX > 0 ? 'like' : 'dislike', velocityX);
       } else {
-        if (reduceMotion) {
-          x.value = 0;
-          y.value = 0;
-        } else {
-          x.value = withSpring(0, { damping: 18, stiffness: 220 });
-          y.value = withSpring(0, { damping: 18, stiffness: 220 });
-        }
-      }
-    },
-    onFinalize: () => {
-      'worklet';
-      if (!isCommitted.value && !entering.value) {
-        if (reduceMotion) {
-          // eslint-disable-next-line react-hooks/immutability -- Reanimated shared values mutate only in this UI worklet.
-          x.value = 0;
-          // eslint-disable-next-line react-hooks/immutability -- Reanimated shared values mutate only in this UI worklet.
-          y.value = 0;
-        } else {
-          x.value = withSpring(0, { damping: 18, stiffness: 220 });
-          y.value = withSpring(0, { damping: 18, stiffness: 220 });
-        }
+        x.set(reduceMotion ? 0 : withSpring(0, { ...spring, velocity: event.canceled ? 0 : velocityX }));
       }
     },
   });
-
-  const cardAnimatedStyle = useAnimatedStyle(() => {
-    const rotateDeg = reduceMotion ? 0 : x.value / 25;
-    const opacity = interpolate(
-      Math.abs(x.value),
-      [0, exitDistance * 0.45, exitDistance * 0.85],
-      [1, 1, 0],
-      Extrapolation.CLAMP
-    );
-    return {
-      transform: [
-        { translateX: reduceMotion ? 0 : x.value },
-        { translateY: reduceMotion ? 0 : y.value },
-        { rotate: `${rotateDeg}deg` },
-      ],
-      opacity,
-    };
+  const hidden = !returning && !current && previous;
+  const movement = useAnimatedStyle(() => {
+    const offset = returning ? origin * (1 - entry.get()) : current ? x.get() : 0;
+    const tilt = reduceMotion ? 0 : clamp(offset / Math.max(width, 1) * 6, -6, 6);
+    return { opacity: hidden ? 0 : 1, transform: [{ translateX: offset }, { rotate: `${tilt}deg` }] };
   });
-
-  const likeStyle = useAnimatedStyle(() => {
-    const opacity = interpolate(x.value, [10, 80], [0, 1], Extrapolation.CLAMP);
-    const scale = interpolate(x.value, [10, 120], [0.85, 1.05], Extrapolation.CLAMP);
-    return {
-      opacity,
-      transform: [{ rotate: '-8deg' }, { scale }],
-    };
-  });
-
-  const dislikeStyle = useAnimatedStyle(() => {
-    const opacity = interpolate(-x.value, [10, 80], [0, 1], Extrapolation.CLAMP);
-    const scale = interpolate(-x.value, [10, 120], [0.85, 1.05], Extrapolation.CLAMP);
-    return {
-      opacity,
-      transform: [{ rotate: '8deg' }, { scale }],
-    };
-  });
-
-  const backCardAnimatedStyle = useAnimatedStyle(() => {
-    if (reduceMotion) return {};
-    const progress = interpolate(Math.abs(x.value), [0, 140], [0, 1], Extrapolation.CLAMP);
-    const scale = interpolate(progress, [0, 1], [0.94, 1.0]);
-    const translateY = interpolate(progress, [0, 1], [12, 0]);
-    const opacity = interpolate(progress, [0, 1], [0.85, 1.0]);
-    return {
-      transform: [{ scale }, { translateY }],
-      opacity,
-    };
-  });
-
-  const backOverlayStyle = useAnimatedStyle(() => {
-    const progress = interpolate(Math.abs(x.value), [0, 140], [0, 1], Extrapolation.CLAMP);
-    return {
-      backgroundColor: 'rgba(0, 0, 0, 0.08)',
-      opacity: 1 - progress,
-    };
-  });
-
-  return (
-    <View style={styles.stage}>
-      <Animated.View style={[styles.backCard, backCardAnimatedStyle]}>
-        {nextPhoto ? (
-          <PhotoImage
-            photo={nextPhoto}
-            language={language}
-            fit="contain"
-            style={styles.photo}
-          />
-        ) : (
-          <View style={styles.emptyBackCard} />
-        )}
-        <Animated.View pointerEvents="none" style={[StyleSheet.absoluteFill, backOverlayStyle]} />
+  const likeBadge = useAnimatedStyle(() => ({ opacity: clamp((x.get() - 12) / 58, 0, 1) }));
+  const dislikeBadge = useAnimatedStyle(() => ({ opacity: clamp((-x.get() - 12) / 58, 0, 1) }));
+  return <View pointerEvents={current ? 'box-none' : 'none'} accessibilityElementsHidden={!current} importantForAccessibility={current ? 'auto' : 'no-hide-descendants'}
+    style={[StyleSheet.absoluteFill, returning ? styles.returning : current ? styles.active : previous ? styles.parked : styles.upcoming]}>
+    <GestureDetector gesture={gesture} touchAction="pan-y">
+      <Animated.View style={[styles.card, movement]}>
+        {image.status === 'failed' ? <View style={styles.failure}>
+          <Text style={[typography.small, styles.failureText]}>{tx(language, 'Surat elýeterli däl. Saýlaw ýazga geçirilmedi.', 'Фото недоступно. Выбор не записан.')}</Text>
+          <Button title={tx(language, 'Suraty täzeden açmak', 'Открыть ещё раз')} variant="secondary" disabled={!current || !!motion} onPress={() => updateImage(image, 'loading')} />
+        </View> : <PhotoImage key={image.attempt} photo={image.photo} language={language} label={label} fit="contain" style={styles.photo}
+          onDisplay={() => updateImage(image, 'ready')} onFailure={() => updateImage(image, 'failed')} />}
+        {current && !returning && image.status === 'ready' && !reduceMotion ? <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={StyleSheet.absoluteFill}>
+          <Animated.View style={[styles.badge, styles.like, likeBadge]}><Text style={styles.badgeText}>{tx(language, 'HALADYM', 'НРАВИТСЯ')}</Text></Animated.View>
+          <Animated.View style={[styles.badge, styles.dislike, dislikeBadge]}><Text style={styles.badgeText}>{tx(language, 'MAŇA DÄL', 'НЕ МОЁ')}</Text></Animated.View>
+        </View> : null}
       </Animated.View>
-      <GestureDetector gesture={gesture} touchAction="pan-y">
-        <Animated.View style={[styles.card, cardAnimatedStyle]}>
-          <PhotoImage
-            photo={photo}
-            language={language}
-            fit="contain"
-            style={styles.photo}
-            label={label}
-            onReady={onReady}
-            onFailure={onFailure}
-          />
-          <Animated.View pointerEvents="none" style={[styles.badge, styles.like, likeStyle]}>
-            <Text style={styles.badgeText}>{tx(language, 'HALADYM', 'НРАВИТСЯ')}</Text>
-          </Animated.View>
-          <Animated.View pointerEvents="none" style={[styles.badge, styles.dislike, dislikeStyle]}>
-            <Text style={styles.badgeText}>{tx(language, 'MAŇA DÄL', 'НЕ МОЁ')}</Text>
-          </Animated.View>
-        </Animated.View>
-      </GestureDetector>
-    </View>
-  );
+    </GestureDetector>
+    {current && image.status === 'loading' ? <View pointerEvents="none" style={styles.spinner}>
+      <ActivityIndicator accessibilityLabel={tx(language, 'Surat açylýar', 'Открываем фото')} color={colors.green} />
+    </View> : null}
+  </View>;
 }
 
 const styles = StyleSheet.create({
-  stage: { flex: 1, width: '100%' },
-  backCard: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: colors.background,
-    overflow: 'hidden',
-  },
-  emptyBackCard: {
-    flex: 1,
-    backgroundColor: colors.background,
-  },
-  card: {
-    width: '100%',
-    height: '100%',
-    overflow: 'hidden',
-    backgroundColor: colors.background,
-  },
+  stage: { flex: 1, minHeight: 0, overflow: 'hidden', backgroundColor: colors.background },
+  card: { ...StyleSheet.absoluteFill, backgroundColor: colors.background, justifyContent: 'center' },
+  active: { zIndex: 2 }, returning: { zIndex: 3 }, upcoming: { zIndex: 1 }, parked: { zIndex: 0 },
   photo: { flex: 1, backgroundColor: colors.background },
-  badge: {
-    position: 'absolute',
-    top: 22,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: colors.white,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  like: { left: 20, backgroundColor: colors.green, transform: [{ rotate: '-8deg' }] },
-  dislike: { right: 20, backgroundColor: colors.danger, transform: [{ rotate: '8deg' }] },
-  badgeText: { fontSize: 14, letterSpacing: 1, fontWeight: '700', color: colors.white },
+  spinner: { ...StyleSheet.absoluteFill, alignItems: 'center', justifyContent: 'center' },
+  failure: { alignItems: 'center', gap: 8, padding: 8 }, failureText: { textAlign: 'center' },
+  badge: { position: 'absolute', top: 12, paddingHorizontal: 14, paddingVertical: 8, borderRadius: 10 },
+  like: { left: 12, backgroundColor: colors.green }, dislike: { right: 12, backgroundColor: colors.danger },
+  badgeText: { color: colors.white, fontSize: 14, fontWeight: '700', letterSpacing: 1 },
 });

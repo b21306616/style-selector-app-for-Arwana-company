@@ -1,5 +1,5 @@
 import { router } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { FlatList, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { AppModal } from '../components/AppModal';
@@ -9,12 +9,16 @@ import { PhotoTile } from '../components/PhotoTile';
 import { PhotoImage } from '../components/PhotoImage';
 import { Button, Chip, EmptyState, ErrorBanner, Header, Screen, colors, errorText, photoCount, sessionLabel, spaceLabel, tx, typography, useLayout } from '../components/ui';
 import { summarizeSession } from '../domain/scoring';
-import type { Photo } from '../domain/types';
+import type { Photo, Session } from '../domain/types';
 import { useApp } from '../state/AppProvider';
 
 export default function ResultScreen() {
   const app = useApp();
-  const { session, language, busy } = app;
+  const { language } = app;
+  const [returningFrom, setReturningFrom] = useState<Session | null>(null);
+  const undoPending = useRef(false);
+  const session = returningFrom ?? app.session;
+  const busy = app.busy || !!returningFrom;
   const layout = useLayout();
   const [confirmNew, setConfirmNew] = useState(false);
   const [failure, setFailure] = useState<string | null>(null);
@@ -34,9 +38,12 @@ export default function ResultScreen() {
   };
   const lastChoice = async () => {
     const choice = session?.ratings.at(-1)?.choice;
-    if (!choice) return;
+    if (!choice || !session || busy || undoPending.current) return;
+    undoPending.current = true;
+    // The completed result stays visible while the gallery opens with the restored card.
+    setReturningFrom(session);
     try { await app.undo(); router.replace({ pathname: '/gallery', params: { entrance: choice } }); }
-    catch (error) { setFailure(errorText(error, language)); }
+    catch (error) { undoPending.current = false; setReturningFrom(null); setFailure(errorText(error, language)); }
   };
   if (!session || !summary || (!complete && session.ratings.length < 20)) return <Screen>
     <Header back={{ label: tx(language, 'Otaglar', 'Пространства'), onPress: () => router.replace('/') }} />

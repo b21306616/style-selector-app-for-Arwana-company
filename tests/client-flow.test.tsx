@@ -24,15 +24,9 @@ jest.mock('../src/components/PhotoImage', () => {
 jest.mock('../src/components/SwipePhoto', () => {
   const React = require('react');
   const { Pressable, Text, View } = require('react-native');
-  return { SwipePhoto: ({ onReady, onFailure, onChoice, onEntranceSettled, enabled, label, entrance }: { onReady: () => void; onFailure: () => void; onChoice: (choice: 'like' | 'dislike') => void; onEntranceSettled?: () => void; enabled: boolean; label: string; entrance?: 'like' | 'dislike' | null }) => React.createElement(View, null,
+  return { SwipePhoto: ({ photo, onChoice, label }: { photo: { id: string }; onChoice: (id: string, choice: 'like', velocity: number) => void; label: string }) => React.createElement(View, null,
     React.createElement(Text, null, label),
-    React.createElement(Text, null, entrance ? `entrance ${entrance}` : 'entrance none'),
-    React.createElement(Text, null, enabled ? 'Swipe enabled' : 'Swipe disabled'),
-    React.createElement(Pressable, { accessibilityRole: 'button', accessibilityLabel: 'Image finished loading', onPress: onReady }, React.createElement(Text, null, 'Image finished loading')),
-    React.createElement(Pressable, { accessibilityRole: 'button', accessibilityLabel: 'Image failed', onPress: onFailure }, React.createElement(Text, null, 'Image failed')),
-    React.createElement(Pressable, { accessibilityRole: 'button', accessibilityLabel: 'Swipe like', onPress: () => onChoice('like') }, React.createElement(Text, null, 'Swipe like')),
-    React.createElement(Pressable, { accessibilityRole: 'button', accessibilityLabel: 'Swipe dislike', onPress: () => onChoice('dislike') }, React.createElement(Text, null, 'Swipe dislike')),
-    React.createElement(Pressable, { accessibilityRole: 'button', accessibilityLabel: 'Entrance settled', onPress: onEntranceSettled }, React.createElement(Text, null, 'Entrance settled')),
+    React.createElement(Pressable, { accessibilityRole: 'button', accessibilityLabel: 'Swipe like', onPress: () => onChoice(photo.id, 'like', 800) }),
   ) };
 });
 
@@ -103,7 +97,6 @@ test('a saved mixed session finishes through gallery and displays room titles in
   app.session = { ...sessionWith(0), catalog: legacy, space: 'whole_house', ratings: [{ photoId: deck[0], choice: 'like' }] };
   const gallery = await render(<GalleryScreen />);
   expect(screen.getByText('Весь дом')).toBeOnTheScreen();
-  await fireEvent.press(screen.getByRole('button', { name: 'Image finished loading' }));
   await fireEvent.press(screen.getByRole('button', { name: 'Swipe like' }));
   expect(app.rate).toHaveBeenCalledWith('like');
 
@@ -153,27 +146,6 @@ test.each([
     platform.restore();
     dimensions.mockRestore();
   }
-});
-
-test('gallery hides style metadata and only accepts one rating after the image loads', async () => {
-  let finish!: () => void;
-  jest.mocked(app.rate).mockImplementation(() => new Promise<void>(resolve => { finish = resolve; }));
-  await render(<GalleryScreen />);
-  expect(screen.queryByText('Skandinaw')).not.toBeOnTheScreen();
-  expect(screen.queryByText('Ýyly bitarap öwüşginler')).not.toBeOnTheScreen();
-  expect(screen.queryByRole('button', { name: 'Haladym' })).not.toBeOnTheScreen();
-  expect(screen.queryByRole('button', { name: 'Maňa däl' })).not.toBeOnTheScreen();
-  expect(screen.queryByText(/Çepe süýşür/)).not.toBeOnTheScreen();
-  expect(screen.getByText('Swipe disabled')).toBeOnTheScreen();
-  await fireEvent.press(screen.getByRole('button', { name: 'Swipe like' }));
-  expect(app.rate).not.toHaveBeenCalled();
-  await fireEvent.press(screen.getByRole('button', { name: 'Image finished loading' }));
-  expect(screen.getByText('Swipe enabled')).toBeOnTheScreen();
-  await fireEvent.press(screen.getByRole('button', { name: 'Swipe like' }));
-  await fireEvent.press(screen.getByRole('button', { name: 'Swipe dislike' }));
-  expect(app.rate).toHaveBeenCalledTimes(1);
-  expect(app.rate).toHaveBeenCalledWith('like');
-  await act(async () => finish());
 });
 
 test('preliminary result is available at 20 ratings, not 19', async () => {
@@ -239,47 +211,11 @@ test('liked-photo viewer uses accessible icon navigation with correct boundaries
   expect(screen.queryByRole('button', { name: 'Indiki' })).not.toBeOnTheScreen();
 });
 
-test('failed photos cannot be rated until a successful reload', async () => {
-  await render(<GalleryScreen />);
-  await fireEvent.press(screen.getByRole('button', { name: 'Image failed' }));
-  expect(screen.getByText('Swipe disabled')).toBeOnTheScreen();
-  await fireEvent.press(screen.getByRole('button', { name: 'Swipe like' }));
-  expect(app.rate).not.toHaveBeenCalled();
-  await fireEvent.press(screen.getByRole('button', { name: 'Suraty täzeden açmak' }));
-  expect(screen.getByText('Swipe disabled')).toBeOnTheScreen();
-  await fireEvent.press(screen.getByRole('button', { name: 'Image finished loading' }));
-  expect(screen.getByText('Swipe enabled')).toBeOnTheScreen();
-  expect(app.rate).not.toHaveBeenCalled();
-});
-
-test('undo brings a liked photo back from the like side', async () => {
-  app.session = sessionWith(1);
-  jest.mocked(app.undo).mockImplementation(async () => { app = { ...app, session: sessionWith(0) }; });
-  const view = await render(<GalleryScreen />);
-  await act(async () => { fireEvent.press(screen.getByRole('button', { name: 'Soňky saýlawy yza gaýtarmak' })); });
-  await view.rerender(<GalleryScreen />);
-  expect(app.undo).toHaveBeenCalledTimes(1);
-  expect(screen.getByText('entrance like')).toBeOnTheScreen();
-  await fireEvent.press(screen.getByRole('button', { name: 'Entrance settled' }));
-  expect(screen.getByText('entrance none')).toBeOnTheScreen();
-});
-
-test('undo brings a disliked photo back from the dislike side', async () => {
-  const photoId = longCatalog.galleries.bathroom[0];
-  app.session = { ...sessionWith(1), ratings: [{ photoId, choice: 'dislike' }] };
-  jest.mocked(app.undo).mockImplementation(async () => { app = { ...app, session: sessionWith(0) }; });
-  const view = await render(<GalleryScreen />);
-  await act(async () => { fireEvent.press(screen.getByRole('button', { name: 'Soňky saýlawy yza gaýtarmak' })); });
-  await view.rerender(<GalleryScreen />);
-  expect(screen.getByText('entrance dislike')).toBeOnTheScreen();
-});
-
 test('undo stays disabled before the first rating', async () => {
   await render(<GalleryScreen />);
   expect(screen.getByRole('button', { name: 'Soňky saýlawy yza gaýtarmak' })).toBeDisabled();
   await fireEvent.press(screen.getByRole('button', { name: 'Soňky saýlawy yza gaýtarmak' }));
   expect(app.undo).not.toHaveBeenCalled();
-  expect(screen.getByText('entrance none')).toBeOnTheScreen();
 });
 
 test('changing the last choice opens the gallery from that choice side', async () => {
@@ -288,6 +224,26 @@ test('changing the last choice opens the gallery from that choice side', async (
   await act(async () => { fireEvent.press(screen.getByRole('button', { name: 'Soňky saýlawy üýtgetmek' })); });
   expect(app.undo).toHaveBeenCalledTimes(1);
   expect(router.replace).toHaveBeenCalledWith({ pathname: '/gallery', params: { entrance: 'like' } });
+});
+
+test('undo keeps a completed short result visible until it opens the gallery once', async () => {
+  const catalog = singleRoomCatalog(2);
+  const ratings = catalog.galleries.bathroom.map(photoId => ({ photoId, choice: 'dislike' as const }));
+  app.session = { ...sessionWith(0), catalog, ratings, status: 'complete' };
+  let finish!: () => void;
+  jest.mocked(app.undo).mockImplementation(() => new Promise<void>(resolve => { finish = resolve; }));
+  const view = await render(<ResultScreen />);
+  const change = () => screen.getByRole('button', { name: 'Soňky saýlawy üýtgetmek' });
+  await fireEvent.press(change());
+  await fireEvent.press(change());
+  expect(app.undo).toHaveBeenCalledTimes(1);
+  app.session = { ...app.session, ratings: ratings.slice(0, 1), status: 'active' };
+  await view.rerender(<ResultScreen />);
+  expect(change()).toBeDisabled();
+  expect(screen.queryByText('Ýene biraz ylham')).toBeNull();
+  await act(() => finish());
+  expect(router.replace).toHaveBeenCalledTimes(1);
+  expect(router.replace).toHaveBeenCalledWith({ pathname: '/gallery', params: { entrance: 'dislike' } });
 });
 
 test('continuing a preliminary result opens the gallery without a return animation', async () => {

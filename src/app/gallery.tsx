@@ -1,92 +1,123 @@
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, StyleSheet, Text, View } from 'react-native';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { StyleSheet, Text, View } from 'react-native';
 import { IconButton, UndoIconButton } from '../components/Icon';
-import { SwipePhoto } from '../components/SwipePhoto';
-import { Button, EmptyState, ErrorBanner, Header, Screen, colors, errorText, sessionLabel, spaceLabel, tx, typography } from '../components/ui';
-import type { Choice } from '../domain/types';
+import { SwipePhoto, type DeckMotion } from '../components/SwipePhoto';
+import { Button, EmptyState, ErrorBanner, Header, Screen, colors, errorText, sessionLabel, spaceLabel, tx, typography, useLayout } from '../components/ui';
+import type { Choice, Session } from '../domain/types';
 import { useApp } from '../state/AppProvider';
 
-const veil = 'rgba(255,254,250,0.55)';
+interface Transition {
+  motion: DeckMotion;
+  saved: boolean;
+  animated: boolean;
+}
 
 export default function GalleryScreen() {
-  const app = useApp();
-  const { session, language, busy } = app;
-  const lock = useRef(false);
-  const routeEntrance = useLocalSearchParams<{ entrance?: string | string[] }>().entrance;
-  const initialEntrance = Array.isArray(routeEntrance) ? routeEntrance[0] : routeEntrance;
-  const [entrance, setEntrance] = useState<Choice | null>(initialEntrance === 'like' || initialEntrance === 'dislike' ? initialEntrance : null);
-  const [failure, setFailure] = useState<string | null>(null);
-  const [loadedId, setLoadedId] = useState<string | null>(null);
-  const [failedImage, setFailedImage] = useState(false);
-  const [retry, setRetry] = useState(0);
-  const deck = session?.catalog.galleries[session.space] ?? [];
-  const position = session?.ratings.length ?? 0;
-  const photo = session?.catalog.photos.find(item => item.id === deck[position]);
-  const nextPhoto = session?.catalog.photos.find(item => item.id === deck[position + 1]);
-  useEffect(() => { if (session?.status === 'complete') router.replace('/result'); }, [session?.status]);
+  const { session, language } = useApp();
+  const { entrance } = useLocalSearchParams<{ entrance?: string | string[] }>();
+  const side = Array.isArray(entrance) ? entrance[0] : entrance;
   useEffect(() => {
-    const entrance = Array.isArray(routeEntrance) ? routeEntrance[0] : routeEntrance;
-    if (entrance === 'like' || entrance === 'dislike') router.setParams({ entrance: '' });
-  }, [routeEntrance]);
-  const vote = async (choice: Choice) => {
-    if (lock.current || busy || !photo || loadedId !== photo.id || failedImage) return;
-    lock.current = true; setFailure(null);
-    try { await app.rate(choice); setLoadedId(null); }
-    catch (error) { setFailure(errorText(error, language)); setRetry(value => value + 1); }
-    finally { lock.current = false; }
-  };
-  const undo = async () => {
-    if (lock.current || busy) return;
-    const choice = session?.ratings.at(-1)?.choice;
-    if (!choice) return;
-    lock.current = true;
-    setEntrance(choice);
-    try { await app.undo(); setFailure(null); setLoadedId(null); setFailedImage(false); }
-    catch (error) { setEntrance(null); setFailure(errorText(error, language)); }
-    finally { lock.current = false; }
-  };
-  const back = { label: tx(language, 'Otaglar', 'Пространства'), onPress: () => router.replace('/') };
+    if (side === 'like' || side === 'dislike') router.setParams({ entrance: '' });
+  }, [side]);
+
   return <Screen scroll={false} style={styles.screen}>
-    {!session ? <View style={styles.fallback}>
-      <Header back={back} />
-      <EmptyState title={tx(language, 'Otagy saýlaň', 'Выберите пространство')} description={tx(language, 'Interýerleri saýlap başlamak üçin otagy açyň.', 'Откройте комнату, чтобы начать выбор.')}><Button title={tx(language, 'Otagy saýlamak', 'Выбрать пространство')} onPress={() => router.replace('/')} /></EmptyState>
-    </View> : session.status === 'complete' ? <ActivityIndicator color={colors.green} style={styles.waiting} /> : <View style={styles.stage}>
-      {photo ? <SwipePhoto key={photo.id + '-' + retry} photo={photo} nextPhoto={nextPhoto} language={language} enabled={loadedId === photo.id && !busy && !failedImage} entrance={entrance} onEntranceSettled={() => setEntrance(null)} onChoice={choice => void vote(choice)} onReady={() => { setLoadedId(photo.id); setFailedImage(false); }} onFailure={() => setFailedImage(true)} label={spaceLabel(photo.room, language, session.catalog.rooms) + '. ' + tx(language, 'Interýer suraty', 'Фотография интерьера') + ' ' + (position + 1) + ' / ' + deck.length} /> : <EmptyState title={tx(language, 'Surat elýeterli däl', 'Фото недоступно')} description={tx(language, 'Otaglara dolanyň we işgärden bu toplumy barlamagy haýyş ediň.', 'Вернитесь к комнатам и попросите сотрудника проверить подборку.')} />}
-      {photo && loadedId !== photo.id && !failedImage ? <ActivityIndicator accessibilityLabel={tx(language, 'Surat açylýar', 'Открываем фото')} color={colors.green} style={styles.spinner} /> : null}
-      {failedImage ? <View style={styles.failure}><Text style={[typography.small, styles.failureText]}>{tx(language, 'Surat elýeterli däl. Saýlaw ýazga geçirilmedi.', 'Фото недоступно. Выбор не записан.')}</Text><Button title={tx(language, 'Suraty täzeden açmak', 'Открыть ещё раз')} variant="secondary" onPress={() => { setFailedImage(false); setRetry(value => value + 1); }} /></View> : null}
-      {failure || app.error ? <View pointerEvents="box-none" style={styles.errorOverlay}><ErrorBanner message={failure ?? errorText(app.error, language)} /></View> : null}
-      <View pointerEvents="box-none" style={styles.topOverlay}>
-        <IconButton icon="back" label={back.label} onPress={back.onPress} style={styles.pill} />
-        <Text accessibilityRole="header" style={styles.room} numberOfLines={1}>{sessionLabel(session, language)}</Text>
-      </View>
-      <View pointerEvents="box-none" style={styles.bottomOverlay}>
-        <View pointerEvents="box-none" style={styles.controlRow}>
-          <UndoIconButton label={tx(language, 'Soňky saýlawy yza gaýtarmak', 'Отменить последний выбор')} fallbackLabel={tx(language, 'Yza gaýtarmak', 'Отменить')} disabled={busy || position === 0} onPress={() => void undo()} style={styles.pill} />
-          <Text accessibilityRole="progressbar" accessibilityLiveRegion="polite" accessibilityLabel={tx(language, 'Görülen suratlar', 'Просмотрено фотографий')} accessibilityValue={{ min: 0, max: deck.length, now: position }} style={styles.counter}>{position + 1}<Text style={styles.counterTotal}> / {deck.length}</Text></Text>
-          {position >= 20 ? <Button title={tx(language, 'Deslapky netijäni görmek', 'Предварительный результат')} variant="secondary" onPress={() => router.replace('/result')} disabled={busy} style={styles.action} /> : null}
-        </View>
-        {position === 0 ? <Text style={styles.hint}>{deck.length > 20 ? tx(language, 'Netije 20 saýlawdan soň elýeterli', 'Результат после 20 оценок') : tx(language, 'Netije soňky suratdan soň', 'Результат после последнего фото')}</Text> : null}
-      </View>
-    </View>}
+    {session ? <SessionGallery key={session.id} session={session} entrance={side === 'like' || side === 'dislike' ? side : null} /> : <>
+      <Header back={{ label: tx(language, 'Otaglar', 'Пространства'), onPress: () => router.replace('/') }} />
+      <EmptyState title={tx(language, 'Otagy saýlaň', 'Выберите пространство')} description={tx(language, 'Interýerleri saýlap başlamak üçin otagy açyň.', 'Откройте комнату, чтобы начать выбор.')}>
+        <Button title={tx(language, 'Otagy saýlamak', 'Выбрать пространство')} onPress={() => router.replace('/')} />
+      </EmptyState>
+    </>}
   </Screen>;
 }
+
+function SessionGallery({ session, entrance }: { session: Session; entrance: Choice | null }) {
+  const { language, busy, error, rate, undo } = useApp();
+  const { width, height } = useLayout();
+  const compact = width > height && height < 500;
+  const deck = session.catalog.galleries[session.space];
+  const photos = useMemo(() => new Map(session.catalog.photos.map(photo => [photo.id, photo])), [session.catalog.photos]);
+  const [transition, setTransition] = useState<Transition | null>(() => entrance && session.status === 'active'
+    ? { motion: { kind: 'entrance', from: session.ratings.length, choice: entrance, velocity: 0 }, saved: true, animated: false }
+    : null);
+  const pending = useRef(transition);
+  const [failure, setFailure] = useState<string | null>(null);
+  const setPending = useCallback((value: Transition | null) => {
+    pending.current = value;
+    setTransition(value);
+  }, []);
+  const finish = useCallback((motion: DeckMotion, part: 'saved' | 'animated') => {
+    const current = pending.current;
+    if (current?.motion !== motion || current[part]) return;
+    const next = { ...current, [part]: true };
+    setPending(next.saved && next.animated ? null : next);
+  }, [setPending]);
+  const animationFinished = useCallback((motion: DeckMotion) => finish(motion, 'animated'), [finish]);
+
+  // Keep the visible card and counter together even when SQLite finishes first.
+  const position = Math.min(transition?.motion.from ?? session.ratings.length, deck.length - 1);
+  const photo = photos.get(deck[position]);
+  const complete = session.status === 'complete' && !transition;
+  const locked = busy || !!transition || complete;
+  const visibleId = useRef<string | undefined>(undefined);
+  useLayoutEffect(() => {
+    visibleId.current = locked ? undefined : photo?.id;
+    return () => { visibleId.current = undefined; };
+  }, [locked, photo?.id]);
+  useEffect(() => { if (complete) router.replace('/result'); }, [complete]);
+
+  const start = (kind: 'vote' | 'undo', choice: Choice, velocity: number) => {
+    if (pending.current || busy || session.status !== 'active' || (kind === 'undo' && position <= 0)) return false;
+    const motion: DeckMotion = { kind, from: position, choice, velocity };
+    setPending({ motion, saved: false, animated: false });
+    setFailure(null);
+    const save = kind === 'vote' ? rate(choice) : undo();
+    void save.then(() => finish(motion, 'saved'), reason => {
+      if (pending.current?.motion !== motion) return;
+      setFailure(errorText(reason, language));
+      setPending(kind === 'vote' ? { motion: { ...motion, kind: 'restore' }, saved: true, animated: false } : null);
+    });
+    return true;
+  };
+  const controls = <View style={styles.actions}>
+    <UndoIconButton label={tx(language, 'Soňky saýlawy yza gaýtarmak', 'Отменить последний выбор')} fallbackLabel={tx(language, 'Yza gaýtarmak', 'Отменить')}
+      disabled={locked || position <= 0} onPress={() => {
+        const choice = session.ratings[position - 1]?.choice;
+        if (choice) start('undo', choice, 0);
+      }} />
+    {position >= 20 ? <Button title={tx(language, 'Deslapky netijäni görmek', 'Предварительный результат')} variant="secondary"
+      disabled={locked} onPress={() => router.replace('/result')} style={styles.resultButton} /> : null}
+  </View>;
+
+  return <>
+    <View style={styles.toolbar}>
+      <View style={styles.heading}>
+        <IconButton icon="back" label={tx(language, 'Otaglar', 'Пространства')} fallbackLabel={tx(language, 'Yza', 'Назад')} disabled={locked} onPress={() => router.replace('/')} />
+        <Text accessibilityRole="header" numberOfLines={2} style={[typography.subheading, styles.room]}>{sessionLabel(session, language)}</Text>
+        <Text accessibilityRole="progressbar" accessibilityLiveRegion="polite" accessibilityLabel={tx(language, 'Interýer suraty', 'Фотография интерьера')}
+          accessibilityValue={{ min: 1, max: deck.length, now: position + 1 }} style={styles.counter}>
+          {position + 1}<Text style={styles.total}> / {deck.length}</Text>
+        </Text>
+      </View>
+      {compact ? controls : null}
+    </View>
+    {failure || error ? <ErrorBanner message={failure ?? errorText(error, language)} /> : null}
+    {photo ? <SwipePhoto previousPhoto={photos.get(deck[position - 1])} photo={photo} nextPhoto={photos.get(deck[position + 1])}
+      language={language} disabled={locked} complete={complete} motion={transition?.motion ?? null} saved={transition?.saved ?? false}
+      onChoice={(id, choice, velocity) => id === visibleId.current && start('vote', choice, velocity)} onSettled={animationFinished}
+      label={spaceLabel(photo.room, language, session.catalog.rooms) + '. ' + tx(language, 'Interýer suraty', 'Фотография интерьера') + ' ' + (position + 1) + ' / ' + deck.length} />
+      : <EmptyState title={tx(language, 'Surat elýeterli däl', 'Фото недоступно')} description={tx(language, 'Otaglara dolanyň we işgärden bu toplumy barlamagy haýyş ediň.', 'Вернитесь к комнатам и попросите сотрудника проверить подборку.')} />}
+    {!compact ? controls : null}
+  </>;
+}
+
 const styles = StyleSheet.create({
-  screen: { gap: 0, paddingTop: 0, paddingBottom: 0, paddingHorizontal: 0, maxWidth: '100%', alignSelf: 'stretch' },
-  fallback: { flex: 1, paddingHorizontal: 16, paddingTop: 8, gap: 16 },
-  waiting: { marginTop: 24 },
-  stage: { flex: 1, minHeight: 160 },
-  spinner: { position: 'absolute', alignSelf: 'center', top: '45%' },
-  failure: { position: 'absolute', left: 12, right: 12, bottom: 112, gap: 8, padding: 12, borderRadius: 14, backgroundColor: colors.surface },
-  failureText: { textAlign: 'center' },
-  errorOverlay: { position: 'absolute', top: 72, left: 12, right: 12 },
-  topOverlay: { position: 'absolute', top: 8, left: 8, right: 8, flexDirection: 'row', alignItems: 'center', gap: 8 },
-  bottomOverlay: { position: 'absolute', left: 8, right: 8, bottom: 8, gap: 8, alignItems: 'flex-start' },
-  controlRow: { flexDirection: 'row', alignItems: 'center', gap: 8, flexWrap: 'wrap' },
-  pill: { backgroundColor: veil, borderWidth: 0 },
-  room: { flexShrink: 1, overflow: 'hidden', paddingHorizontal: 12, paddingVertical: 8, borderRadius: 20, backgroundColor: veil, fontSize: 16, lineHeight: 22, fontWeight: '600', color: colors.ink },
-  counter: { overflow: 'hidden', minHeight: 48, paddingHorizontal: 14, borderRadius: 24, backgroundColor: veil, fontSize: 16, lineHeight: 48, fontWeight: '600', color: colors.ink },
-  counterTotal: { fontSize: 13, lineHeight: 48, fontWeight: '500', color: colors.muted },
-  action: { backgroundColor: veil, borderWidth: 0 },
-  hint: { overflow: 'hidden', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, backgroundColor: veil, fontSize: 13, lineHeight: 19, color: colors.muted },
+  screen: { maxWidth: '100%', gap: 8, paddingTop: 8, paddingBottom: 8 },
+  toolbar: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 8 },
+  heading: { flexGrow: 1, flexShrink: 1, flexBasis: 225, flexDirection: 'row', alignItems: 'center', gap: 8 },
+  room: { flex: 1 },
+  counter: { fontSize: 16, fontVariant: ['tabular-nums'], fontWeight: '600', color: colors.green },
+  total: { fontWeight: '500', color: colors.muted },
+  actions: { flexDirection: 'row', justifyContent: 'center', alignItems: 'center', flexWrap: 'wrap', maxWidth: '100%', gap: 8 },
+  resultButton: { flexShrink: 1 },
 });
